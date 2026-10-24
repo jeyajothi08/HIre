@@ -1,3 +1,4 @@
+import './env.js';
 import mongoose from 'mongoose';
 
 let lastConnectionError = null;
@@ -9,6 +10,7 @@ let lastConnectionError = null;
 export const categorizeMongoError = (error) => {
   if (!error) return null;
   const msg = error.message || '';
+  const errName = error.name || '';
 
   if (
     msg.includes('bad auth') || 
@@ -23,9 +25,12 @@ export const categorizeMongoError = (error) => {
   }
 
   if (
+    errName.includes('ServerSelectionError') ||
     msg.includes('ETIMEDOUT') || 
     msg.includes('Server selection timed out') || 
-    msg.includes('MongoServerSelectionError')
+    msg.includes('MongoServerSelectionError') ||
+    msg.includes('Could not connect to any servers') ||
+    msg.includes('whitelist')
   ) {
     return {
       category: 'NETWORK_OR_IP_WHITELIST',

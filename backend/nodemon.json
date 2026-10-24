@@ -3,6 +3,5 @@
     "src",
     ".env"
   ],
-  "ext": "js,mjs,cjs,json,env",
-  "exec": "node src/server.js"
+  "ext": "js,mjs,cjs,json,env"
 }
