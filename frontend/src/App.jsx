@@ -3,17 +3,14 @@ import {
   Search, 
   MapPin, 
   Briefcase, 
-  Clock, 
   DollarSign, 
   ChevronRight, 
   ArrowUpRight, 
   Building2, 
   Sparkles, 
-  CheckCircle2, 
   Menu, 
   X,
-  Bookmark,
-  Filter
+  Bookmark
 } from 'lucide-react';
 
 const FEATURED_JOBS = [
