@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
+import { setupTestEnvironment } from './testHarness.js';
 
-const BASE_URL = process.env.API_URL || 'http://localhost:5001';
+let BASE_URL = process.env.API_URL || 'http://localhost:5001';
 
 async function request(path, options = {}) {
   const { headers = {}, ...rest } = options;
@@ -18,6 +19,8 @@ async function request(path, options = {}) {
 }
 
 async function runTests() {
+  const testEnv = await setupTestEnvironment();
+  BASE_URL = testEnv.baseUrl;
   console.log(`🧪 Starting Phase 3/5 Jobs API Test Suite against ${BASE_URL}...`);
   let createdJobId = null;
   let employerToken = null;
@@ -192,6 +195,8 @@ async function runTests() {
       } catch (_) {}
     }
     process.exit(1);
+  } finally {
+    await testEnv.teardown();
   }
 }
 

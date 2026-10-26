@@ -13,10 +13,17 @@ import {
   X,
   Bookmark,
   AlertCircle,
-  RefreshCw
+  RefreshCw,
+  LogOut,
+  Plus,
+  ShieldCheck,
+  ChevronDown
 } from 'lucide-react';
 import { getJobs, formatSalary, formatRelativeTime } from './services/jobService';
+import { getMe, logout } from './services/authService';
 import JobDetailsModal from './components/JobDetailsModal';
+import AuthModal from './components/AuthModal';
+import CreateJobModal from './components/CreateJobModal';
 
 const WORKPLACE_TABS = ['All', 'Remote', 'Hybrid', 'On-site'];
 const TRENDING_TAGS = ['Remote', 'React', 'Node.js', 'TypeScript', 'MongoDB', 'Design Systems'];
@@ -50,6 +57,54 @@ export default function App() {
     }
   });
   const [selectedJobId, setSelectedJobId] = useState(null);
+
+  // Authentication & Dialog state
+  const [user, setUser] = useState(null);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authModalTab, setAuthModalTab] = useState('login');
+  const [authModalRole, setAuthModalRole] = useState('jobseeker');
+  const [createJobModalOpen, setCreateJobModalOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+
+  // Check active session on initial mount
+  useEffect(() => {
+    getMe().then((existingUser) => {
+      if (existingUser) setUser(existingUser);
+    });
+  }, []);
+
+  // Post Job CTA handler
+  const handleOpenPostJob = () => {
+    if (!user) {
+      setAuthModalTab('register');
+      setAuthModalRole('employer');
+      setAuthModalOpen(true);
+      return;
+    }
+    if (user.role !== 'employer' && user.role !== 'admin') {
+      alert('Posting jobs requires an Employer account. Please sign in or register as an Employer.');
+      return;
+    }
+    setCreateJobModalOpen(true);
+  };
+
+  const handleSignOut = async () => {
+    try {
+      await logout();
+    } catch {
+      // Ignore network errors on logout and reset local session
+    }
+    setUser(null);
+    setUserMenuOpen(false);
+  };
+
+  const handleJobCreated = (newJob) => {
+    setRetryCount((c) => c + 1);
+    setCurrentPage(1);
+    if (newJob && newJob._id) {
+      setSelectedJobId(newJob._id);
+    }
+  };
 
   // Sync saved jobs to localStorage
   const toggleSaveJob = (id, e) => {
@@ -178,25 +233,100 @@ export default function App() {
 
           {/* Action CTAs */}
           <div className="hidden md:flex items-center space-x-3">
-            <button 
-              type="button" 
-              className="text-sm font-medium text-slate-700 hover:text-slate-900 px-3.5 py-2 rounded-lg transition-colors"
-            >
-              Sign In
-            </button>
-            <button 
-              type="button" 
-              onClick={() => alert('Employer Job Posting portal is coming in Phase 5!')}
-              className="text-sm font-medium border border-slate-300 hover:border-slate-400 text-slate-800 px-3.5 py-2 rounded-lg transition-all hover:bg-slate-50"
-            >
-              Post a Job
-            </button>
-            <a 
-              href="#jobs" 
-              className="text-sm font-medium bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-lg transition-colors shadow-sm"
-            >
-              Explore Roles
-            </a>
+            {user ? (
+              <>
+                {/* Role Badge */}
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                  {user.role === 'employer' ? (
+                    <>
+                      <Building2 className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Employer</span>
+                    </>
+                  ) : user.role === 'admin' ? (
+                    <>
+                      <ShieldCheck className="w-3.5 h-3.5 text-purple-600" />
+                      <span>Admin</span>
+                    </>
+                  ) : (
+                    <>
+                      <Briefcase className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Job Seeker</span>
+                    </>
+                  )}
+                </div>
+
+                {/* Post a Job button (Active for employer) */}
+                <button 
+                  type="button" 
+                  onClick={handleOpenPostJob}
+                  className="text-xs font-semibold border border-slate-300 hover:border-slate-400 text-slate-800 px-3.5 py-2 rounded-lg transition-all hover:bg-slate-50 flex items-center gap-1.5 shadow-sm"
+                >
+                  <Plus className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Post a Job</span>
+                </button>
+
+                {/* User Dropdown Menu */}
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setUserMenuOpen(!userMenuOpen)}
+                    className="flex items-center space-x-2 p-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors text-slate-700"
+                  >
+                    <div className="w-7 h-7 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-xs uppercase">
+                      {user.name ? user.name.charAt(0) : 'U'}
+                    </div>
+                    <span className="text-xs font-semibold max-w-[120px] truncate">{user.name}</span>
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                  </button>
+
+                  {userMenuOpen && (
+                    <div 
+                      className="absolute right-0 mt-2 w-56 rounded-xl bg-white border border-slate-200 shadow-xl py-2 z-50 animate-in fade-in zoom-in-95"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="px-3 py-2 border-b border-slate-100">
+                        <p className="text-xs font-bold text-slate-900 truncate">{user.name}</p>
+                        <p className="text-[11px] text-slate-500 truncate">{user.email}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleSignOut}
+                        className="w-full px-3 py-2 text-left text-xs text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors font-medium mt-1"
+                      >
+                        <LogOut className="w-3.5 h-3.5" />
+                        <span>Sign Out</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    setAuthModalTab('login');
+                    setAuthModalOpen(true);
+                  }}
+                  className="text-sm font-medium text-slate-700 hover:text-slate-900 px-3.5 py-2 rounded-lg transition-colors"
+                >
+                  Sign In
+                </button>
+                <button 
+                  type="button" 
+                  onClick={handleOpenPostJob}
+                  className="text-sm font-medium border border-slate-300 hover:border-slate-400 text-slate-800 px-3.5 py-2 rounded-lg transition-all hover:bg-slate-50"
+                >
+                  Post a Job
+                </button>
+                <a 
+                  href="#jobs" 
+                  className="text-sm font-medium bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-lg transition-colors shadow-sm"
+                >
+                  Explore Roles
+                </a>
+              </>
+            )}
           </div>
 
           {/* Mobile Menu Button */}
@@ -217,14 +347,58 @@ export default function App() {
             <a href="#jobs" onClick={() => setMobileMenuOpen(false)} className="block text-sm font-medium text-slate-800 py-1.5">Find Jobs</a>
             <a href="#about" onClick={() => setMobileMenuOpen(false)} className="block text-sm font-medium text-slate-800 py-1.5">Why HireHub</a>
             <a href="http://localhost:5001/api/v1/health" target="_blank" rel="noreferrer" className="block text-sm font-medium text-slate-800 py-1.5">API Status</a>
+            
             <div className="pt-3 border-t border-slate-100 flex flex-col space-y-2">
-              <button className="w-full text-center py-2 text-sm font-medium border border-slate-200 rounded-lg">Sign In</button>
-              <button 
-                onClick={() => alert('Employer portal coming soon!')}
-                className="w-full text-center py-2 text-sm font-medium bg-slate-900 text-white rounded-lg"
-              >
-                Post a Job
-              </button>
+              {user ? (
+                <>
+                  <div className="px-3 py-2 bg-slate-50 rounded-lg flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-bold text-slate-900">{user.name}</p>
+                      <p className="text-[10px] text-slate-500 capitalize">{user.role}</p>
+                    </div>
+                    <button 
+                      onClick={() => {
+                        handleSignOut();
+                        setMobileMenuOpen(false);
+                      }}
+                      className="text-xs text-red-600 font-medium"
+                    >
+                      Sign Out
+                    </button>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      handleOpenPostJob();
+                    }}
+                    className="w-full text-center py-2 text-sm font-medium bg-slate-900 text-white rounded-lg"
+                  >
+                    Post a Job
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button 
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      setAuthModalTab('login');
+                      setAuthModalOpen(true);
+                    }}
+                    className="w-full text-center py-2 text-sm font-medium border border-slate-200 rounded-lg"
+                  >
+                    Sign In
+                  </button>
+                  <button 
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      handleOpenPostJob();
+                    }}
+                    className="w-full text-center py-2 text-sm font-medium bg-slate-900 text-white rounded-lg"
+                  >
+                    Post a Job
+                  </button>
+                </>
+              )}
             </div>
           </div>
         )}
@@ -477,6 +651,11 @@ export default function App() {
                       </span>
                       <span className="text-slate-300">•</span>
                       <span className="text-xs text-slate-400">{formatRelativeTime(job.createdAt)}</span>
+                      {user && (job.createdBy === user.id || job.createdBy === user._id || (job.createdBy && job.createdBy._id === user.id)) && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                          Your Listing
+                        </span>
+                      )}
                     </div>
 
                     <h3 className="text-base font-bold text-slate-900 mt-1 group-hover:text-blue-600 transition-colors flex items-center gap-1.5">
@@ -679,6 +858,24 @@ export default function App() {
         onClose={closeJobModal}
         isSaved={selectedJobId ? savedJobs.has(selectedJobId) : false}
         onToggleSave={(id) => toggleSaveJob(id)}
+      />
+
+      {/* Authentication Modal */}
+      <AuthModal
+        key={`${authModalOpen}-${authModalTab}-${authModalRole}`}
+        isOpen={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        initialTab={authModalTab}
+        initialRole={authModalRole}
+        onSuccess={(authenticatedUser) => setUser(authenticatedUser)}
+      />
+
+      {/* Employer Post Job Modal */}
+      <CreateJobModal
+        key={createJobModalOpen ? 'create-job-open' : 'create-job-closed'}
+        isOpen={createJobModalOpen}
+        onClose={() => setCreateJobModalOpen(false)}
+        onJobCreated={handleJobCreated}
       />
     </div>
   );

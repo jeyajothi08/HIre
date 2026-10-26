@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
+import { setupTestEnvironment } from './testHarness.js';
 
-const BASE_URL = process.env.API_URL || 'http://localhost:5001';
+let BASE_URL = process.env.API_URL || 'http://localhost:5001';
 
 // Unique email generator to avoid collision across repeated test runs
 const timestamp = Date.now();
@@ -27,6 +28,8 @@ async function request(path, options = {}) {
 }
 
 async function runAuthTests() {
+  const testEnv = await setupTestEnvironment();
+  BASE_URL = testEnv.baseUrl;
   console.log(`🧪 Starting Phase 5 Auth & Authorization Test Suite against ${BASE_URL}...`);
 
   let jobseekerToken = null;
@@ -306,6 +309,8 @@ async function runAuthTests() {
       } catch (_) {}
     }
     process.exit(1);
+  } finally {
+    await testEnv.teardown();
   }
 }
 

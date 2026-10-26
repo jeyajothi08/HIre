@@ -31,7 +31,7 @@ app.use(
       ) {
         return callback(null, true);
       }
-      return callback(new Error(`CORS blocked for origin: ${origin}`));
+      return callback(null, false);
     },
     credentials: true, // Required for httpOnly cookies across origins
   })

@@ -337,7 +337,7 @@ export const updateJob = async (req, res, next) => {
     }
 
     const updatedJob = await Job.findByIdAndUpdate(id, updates, {
-      new: true,
+      returnDocument: 'after',
       runValidators: true,
     });
 

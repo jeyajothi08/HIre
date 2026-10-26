@@ -84,6 +84,41 @@ export async function getJobById(id) {
 }
 
 /**
+ * Create a new job posting (Employer only).
+ * Automatically transmits the httpOnly auth cookie via credentials: 'include'.
+ * 
+ * @param {Object} jobData - Job posting payload
+ * @returns {Promise<{success: boolean, message: string, data: Object}>}
+ */
+export async function createJob(jobData) {
+  const url = `${API_BASE_URL}/jobs`;
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      credentials: 'include',
+      body: JSON.stringify(jobData),
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      const errorMsg = data.errors ? data.errors.join('. ') : (data.message || `Failed to create job (Status ${response.status})`);
+      throw new Error(errorMsg);
+    }
+
+    return data;
+  } catch (error) {
+    console.error('Job API error in createJob:', error);
+    throw error;
+  }
+}
+
+/**
  * Format salary figures into human-readable currency strings.
  * e.g., (140000, 175000) -> "$140k – $175k"
  */
