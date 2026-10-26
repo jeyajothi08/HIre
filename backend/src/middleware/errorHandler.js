@@ -21,10 +21,14 @@ export const errorHandler = (err, req, res, next) => {
   // MongoDB duplicate key error (code 11000)
   if (err.code === 11000) {
     statusCode = 400;
-    const field = Object.keys(err.keyValue || {})[0];
-    message = field === 'email'
-      ? 'An account with this email address already exists.'
-      : `Duplicate value entered for ${field}.`;
+    if (err.keyValue && (err.keyValue.job || err.keyValue.applicant)) {
+      message = 'You have already submitted an application for this position.';
+    } else {
+      const field = Object.keys(err.keyValue || {})[0];
+      message = field === 'email'
+        ? 'An account with this email address already exists.'
+        : `Duplicate value entered for ${field}.`;
+    }
   }
 
   // Mongoose validation error

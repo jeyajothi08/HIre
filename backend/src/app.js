@@ -6,6 +6,8 @@ import cookieParser from 'cookie-parser';
 import healthRoutes from './routes/healthRoutes.js';
 import jobRoutes from './routes/jobRoutes.js';
 import authRoutes from './routes/authRoutes.js';
+import applicationRoutes from './routes/applicationRoutes.js';
+import profileRoutes from './routes/profileRoutes.js';
 import { notFound, errorHandler } from './middleware/errorHandler.js';
 
 const app = express();
@@ -51,6 +53,8 @@ app.get('/', (req, res) => {
       health: '/api/v1/health',
       jobs: '/api/v1/jobs',
       auth: '/api/v1/auth',
+      applications: '/api/v1/applications',
+      profile: '/api/v1/profile',
     },
   });
 });
@@ -59,6 +63,8 @@ app.get('/', (req, res) => {
 app.use('/api/v1', healthRoutes);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/jobs', jobRoutes);
+app.use('/api/v1/applications', applicationRoutes);
+app.use('/api/v1/profile', profileRoutes);
 
 // Error handling middleware
 app.use(notFound);

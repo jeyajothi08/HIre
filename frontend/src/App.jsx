@@ -17,13 +17,20 @@ import {
   LogOut,
   Plus,
   ShieldCheck,
-  ChevronDown
+  ChevronDown,
+  Users,
+  FileText,
+  User
 } from 'lucide-react';
 import { getJobs, formatSalary, formatRelativeTime } from './services/jobService';
 import { getMe, logout } from './services/authService';
+import { getMyApplications } from './services/applicationService';
 import JobDetailsModal from './components/JobDetailsModal';
 import AuthModal from './components/AuthModal';
 import CreateJobModal from './components/CreateJobModal';
+import MyApplicationsModal from './components/MyApplicationsModal';
+import EmployerApplicantsModal from './components/EmployerApplicantsModal';
+import CandidateProfileModal from './components/CandidateProfileModal';
 
 const WORKPLACE_TABS = ['All', 'Remote', 'Hybrid', 'On-site'];
 const TRENDING_TAGS = ['Remote', 'React', 'Node.js', 'TypeScript', 'MongoDB', 'Design Systems'];
@@ -64,6 +71,10 @@ export default function App() {
   const [authModalTab, setAuthModalTab] = useState('login');
   const [authModalRole, setAuthModalRole] = useState('jobseeker');
   const [createJobModalOpen, setCreateJobModalOpen] = useState(false);
+  const [myApplicationsModalOpen, setMyApplicationsModalOpen] = useState(false);
+  const [employerApplicantsModalOpen, setEmployerApplicantsModalOpen] = useState(false);
+  const [candidateProfileModalOpen, setCandidateProfileModalOpen] = useState(false);
+  const [appliedJobIds, setAppliedJobIds] = useState(new Set());
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
   // Check active session on initial mount
@@ -72,6 +83,33 @@ export default function App() {
       if (existingUser) setUser(existingUser);
     });
   }, []);
+
+  // Fetch submitted applications when logged in as jobseeker
+  useEffect(() => {
+    if (!user || user.role !== 'jobseeker') {
+      return;
+    }
+
+    let isMounted = true;
+    getMyApplications()
+      .then((res) => {
+        if (isMounted && res && res.data) {
+          const ids = new Set(
+            res.data
+              .map((app) => (app.job && app.job._id ? app.job._id : app.job))
+              .filter(Boolean)
+          );
+          setAppliedJobIds(ids);
+        }
+      })
+      .catch(() => {
+        // Gracefully ignore fetch errors
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user]);
 
   // Post Job CTA handler
   const handleOpenPostJob = () => {
@@ -95,6 +133,7 @@ export default function App() {
       // Ignore network errors on logout and reset local session
     }
     setUser(null);
+    setAppliedJobIds(new Set());
     setUserMenuOpen(false);
   };
 
@@ -255,13 +294,53 @@ export default function App() {
                   )}
                 </div>
 
+                {/* Job Seeker Actions: My Applications & Profile */}
+                {user.role === 'jobseeker' && (
+                  <>
+                    <button 
+                      type="button" 
+                      onClick={() => setCandidateProfileModalOpen(true)}
+                      className="text-xs font-semibold border border-slate-300 hover:border-slate-400 text-slate-800 px-3 py-2 rounded-lg transition-all hover:bg-slate-50 flex items-center gap-1.5 shadow-sm"
+                    >
+                      <User className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Profile & Resume</span>
+                    </button>
+
+                    <button 
+                      type="button" 
+                      onClick={() => setMyApplicationsModalOpen(true)}
+                      className="text-xs font-semibold border border-slate-300 hover:border-slate-400 text-slate-800 px-3 py-2 rounded-lg transition-all hover:bg-slate-50 flex items-center gap-1.5 shadow-sm"
+                    >
+                      <FileText className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>My Applications</span>
+                      {appliedJobIds.size > 0 && (
+                        <span className="ml-0.5 px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                          {appliedJobIds.size}
+                        </span>
+                      )}
+                    </button>
+                  </>
+                )}
+
+                {/* Employer Action: Review Applicants */}
+                {(user.role === 'employer' || user.role === 'admin') && (
+                  <button 
+                    type="button" 
+                    onClick={() => setEmployerApplicantsModalOpen(true)}
+                    className="text-xs font-semibold border border-slate-300 hover:border-slate-400 text-slate-800 px-3 py-2 rounded-lg transition-all hover:bg-slate-50 flex items-center gap-1.5 shadow-sm"
+                  >
+                    <Users className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Review Applicants</span>
+                  </button>
+                )}
+
                 {/* Post a Job button (Active for employer) */}
                 <button 
                   type="button" 
                   onClick={handleOpenPostJob}
-                  className="text-xs font-semibold border border-slate-300 hover:border-slate-400 text-slate-800 px-3.5 py-2 rounded-lg transition-all hover:bg-slate-50 flex items-center gap-1.5 shadow-sm"
+                  className="text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white px-3.5 py-2 rounded-lg transition-all flex items-center gap-1.5 shadow-sm"
                 >
-                  <Plus className="w-3.5 h-3.5 text-blue-600" />
+                  <Plus className="w-3.5 h-3.5 text-blue-400" />
                   <span>Post a Job</span>
                 </button>
 
@@ -288,10 +367,51 @@ export default function App() {
                         <p className="text-xs font-bold text-slate-900 truncate">{user.name}</p>
                         <p className="text-[11px] text-slate-500 truncate">{user.email}</p>
                       </div>
+
+                      {user.role === 'jobseeker' ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setUserMenuOpen(false);
+                              setCandidateProfileModalOpen(true);
+                            }}
+                            className="w-full px-3 py-2 text-left text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2 transition-colors font-medium"
+                          >
+                            <User className="w-3.5 h-3.5 text-blue-600" />
+                            <span>Candidate Profile & Resume</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setUserMenuOpen(false);
+                              setMyApplicationsModalOpen(true);
+                            }}
+                            className="w-full px-3 py-2 text-left text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2 transition-colors font-medium"
+                          >
+                            <FileText className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>My Applications ({appliedJobIds.size})</span>
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setUserMenuOpen(false);
+                            setEmployerApplicantsModalOpen(true);
+                          }}
+                          className="w-full px-3 py-2 text-left text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2 transition-colors font-medium"
+                        >
+                          <Users className="w-3.5 h-3.5 text-blue-600" />
+                          <span>Candidate Pipeline</span>
+                        </button>
+                      )}
+
                       <button
                         type="button"
                         onClick={handleSignOut}
-                        className="w-full px-3 py-2 text-left text-xs text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors font-medium mt-1"
+                        className="w-full px-3 py-2 text-left text-xs text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors font-medium mt-1 border-t border-slate-100"
                       >
                         <LogOut className="w-3.5 h-3.5" />
                         <span>Sign Out</span>
@@ -366,6 +486,44 @@ export default function App() {
                       Sign Out
                     </button>
                   </div>
+
+                  {user.role === 'jobseeker' ? (
+                    <>
+                      <button 
+                        onClick={() => {
+                          setMobileMenuOpen(false);
+                          setCandidateProfileModalOpen(true);
+                        }}
+                        className="w-full text-center py-2 text-sm font-medium border border-slate-200 rounded-lg flex items-center justify-center gap-2"
+                      >
+                        <User className="w-4 h-4 text-blue-600" />
+                        <span>Profile & Resume</span>
+                      </button>
+
+                      <button 
+                        onClick={() => {
+                          setMobileMenuOpen(false);
+                          setMyApplicationsModalOpen(true);
+                        }}
+                        className="w-full text-center py-2 text-sm font-medium border border-slate-200 rounded-lg flex items-center justify-center gap-2"
+                      >
+                        <FileText className="w-4 h-4 text-emerald-600" />
+                        <span>My Applications ({appliedJobIds.size})</span>
+                      </button>
+                    </>
+                  ) : (
+                    <button 
+                      onClick={() => {
+                        setMobileMenuOpen(false);
+                        setEmployerApplicantsModalOpen(true);
+                      }}
+                      className="w-full text-center py-2 text-sm font-medium border border-slate-200 rounded-lg flex items-center justify-center gap-2"
+                    >
+                      <Users className="w-4 h-4 text-blue-600" />
+                      <span>Review Applicants</span>
+                    </button>
+                  )}
+
                   <button 
                     onClick={() => {
                       setMobileMenuOpen(false);
@@ -656,6 +814,11 @@ export default function App() {
                           Your Listing
                         </span>
                       )}
+                      {appliedJobIds.has(job._id) && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                          Applied
+                        </span>
+                      )}
                     </div>
 
                     <h3 className="text-base font-bold text-slate-900 mt-1 group-hover:text-blue-600 transition-colors flex items-center gap-1.5">
@@ -853,11 +1016,26 @@ export default function App() {
 
       {/* Real Job Details Modal */}
       <JobDetailsModal
+        key={selectedJobId || 'closed'}
         jobId={selectedJobId}
         isOpen={Boolean(selectedJobId)}
         onClose={closeJobModal}
         isSaved={selectedJobId ? savedJobs.has(selectedJobId) : false}
         onToggleSave={(id) => toggleSaveJob(id)}
+        user={user}
+        onOpenAuthModal={(tab, role) => {
+          setAuthModalTab(tab || 'login');
+          if (role) setAuthModalRole(role);
+          setAuthModalOpen(true);
+        }}
+        appliedJobIds={appliedJobIds}
+        onJobApplied={(newApp) => {
+          const jId = newApp.job?._id || newApp.job;
+          if (jId) {
+            setAppliedJobIds((prev) => new Set(prev).add(jId));
+          }
+        }}
+        onOpenCandidateProfile={() => setCandidateProfileModalOpen(true)}
       />
 
       {/* Authentication Modal */}
@@ -867,7 +1045,12 @@ export default function App() {
         onClose={() => setAuthModalOpen(false)}
         initialTab={authModalTab}
         initialRole={authModalRole}
-        onSuccess={(authenticatedUser) => setUser(authenticatedUser)}
+        onSuccess={(authenticatedUser) => {
+          setUser(authenticatedUser);
+          if (authenticatedUser?.role !== 'jobseeker') {
+            setAppliedJobIds(new Set());
+          }
+        }}
       />
 
       {/* Employer Post Job Modal */}
@@ -876,6 +1059,29 @@ export default function App() {
         isOpen={createJobModalOpen}
         onClose={() => setCreateJobModalOpen(false)}
         onJobCreated={handleJobCreated}
+      />
+
+      {/* Jobseeker My Applications Modal */}
+      <MyApplicationsModal
+        isOpen={myApplicationsModalOpen}
+        onClose={() => setMyApplicationsModalOpen(false)}
+        onSelectJob={(id) => {
+          setMyApplicationsModalOpen(false);
+          setSelectedJobId(id);
+        }}
+      />
+
+      {/* Employer Candidate Pipeline Modal */}
+      <EmployerApplicantsModal
+        isOpen={employerApplicantsModalOpen}
+        onClose={() => setEmployerApplicantsModalOpen(false)}
+      />
+
+      {/* Candidate Profile & Resume Modal */}
+      <CandidateProfileModal
+        key={candidateProfileModalOpen ? 'candidate-profile-open' : 'candidate-profile-closed'}
+        isOpen={candidateProfileModalOpen}
+        onClose={() => setCandidateProfileModalOpen(false)}
       />
     </div>
   );

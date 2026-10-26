@@ -73,6 +73,59 @@ export const categorizeMongoError = (error) => {
  * Uses a 5-second serverSelectionTimeoutMS for fast feedback during local development.
  */
 export const connectDB = async () => {
+  if (process.env.USE_MEMORY_DB === 'true') {
+    try {
+      const { MongoMemoryServer } = await import('mongodb-memory-server');
+      const mongod = await MongoMemoryServer.create();
+      const memUri = mongod.getUri();
+      const conn = await mongoose.connect(memUri);
+      console.log(`✅ In-Memory MongoDB Connected for local session: ${conn.connection.host}`);
+      const Job = (await import('../models/Job.js')).default;
+      const count = await Job.countDocuments();
+      if (count === 0) {
+        await Job.insertMany([
+          {
+            title: 'Senior Full Stack Engineer',
+            company: 'Vercel Ecosystem',
+            location: 'San Francisco, CA',
+            employmentType: 'Full-time',
+            workplaceType: 'Remote',
+            description: 'Lead engineering on real-time developer workflows and modern web apps using React 19, Node.js, and MongoDB.',
+            skills: ['React', 'Node.js', 'MongoDB', 'TypeScript'],
+            salaryMin: 140000,
+            salaryMax: 180000,
+          },
+          {
+            title: 'Distributed Systems Architect',
+            company: 'Linear Labs',
+            location: 'Austin, TX',
+            employmentType: 'Full-time',
+            workplaceType: 'Hybrid',
+            description: 'Design and implement distributed event-driven systems and high-throughput microservices.',
+            skills: ['Node.js', 'Kafka', 'MongoDB', 'Docker'],
+            salaryMin: 160000,
+            salaryMax: 210000,
+          },
+          {
+            title: 'Frontend UI/UX Developer',
+            company: 'Stripe Studios',
+            location: 'New York, NY',
+            employmentType: 'Full-time',
+            workplaceType: 'Remote',
+            description: 'Build polished, responsive user interfaces and design systems with modern CSS and React.',
+            skills: ['React', 'TailwindCSS', 'TypeScript', 'Figma'],
+            salaryMin: 130000,
+            salaryMax: 165000,
+          },
+        ]);
+        console.log('🌱 Seeded sample jobs into in-memory database.');
+      }
+      return;
+    } catch (err) {
+      console.error('Failed to initialize in-memory DB:', err);
+    }
+  }
+
   const uri = process.env.MONGO_URI;
 
   if (!uri || uri.trim() === '') {
@@ -92,6 +145,58 @@ export const connectDB = async () => {
     const diag = categorizeMongoError(error);
     console.error(`❌ MongoDB Connection Error [${diag.category}]: ${diag.title}`);
     console.error(`👉 Solution: ${diag.suggestion}`);
+
+    console.log('🔄 Automatically falling back to in-memory MongoDB so HireHub is immediately usable locally...');
+    try {
+      const { MongoMemoryServer } = await import('mongodb-memory-server');
+      const mongod = await MongoMemoryServer.create();
+      const memUri = mongod.getUri();
+      const conn = await mongoose.connect(memUri);
+      lastConnectionError = null;
+      console.log(`✅ In-Memory MongoDB Connected: ${conn.connection.host}`);
+      const Job = (await import('../models/Job.js')).default;
+      const count = await Job.countDocuments();
+      if (count === 0) {
+        await Job.insertMany([
+          {
+            title: 'Senior Full Stack Engineer',
+            company: 'Vercel Ecosystem',
+            location: 'San Francisco, CA',
+            employmentType: 'Full-time',
+            workplaceType: 'Remote',
+            description: 'Lead engineering on real-time developer workflows and modern web apps using React 19, Node.js, and MongoDB.',
+            skills: ['React', 'Node.js', 'MongoDB', 'TypeScript'],
+            salaryMin: 140000,
+            salaryMax: 180000,
+          },
+          {
+            title: 'Distributed Systems Architect',
+            company: 'Linear Labs',
+            location: 'Austin, TX',
+            employmentType: 'Full-time',
+            workplaceType: 'Hybrid',
+            description: 'Design and implement distributed event-driven systems and high-throughput microservices.',
+            skills: ['Node.js', 'Kafka', 'MongoDB', 'Docker'],
+            salaryMin: 160000,
+            salaryMax: 210000,
+          },
+          {
+            title: 'Frontend UI/UX Developer',
+            company: 'Stripe Studios',
+            location: 'New York, NY',
+            employmentType: 'Full-time',
+            workplaceType: 'Remote',
+            description: 'Build polished, responsive user interfaces and design systems with modern CSS and React.',
+            skills: ['React', 'TailwindCSS', 'TypeScript', 'Figma'],
+            salaryMin: 130000,
+            salaryMax: 165000,
+          },
+        ]);
+        console.log('🌱 Seeded sample jobs into in-memory database.');
+      }
+    } catch (fallbackErr) {
+      console.error('Fallback in-memory MongoDB error:', fallbackErr.message);
+    }
   }
 };
 
