@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   X,
   User,
@@ -13,7 +13,10 @@ import {
   Loader2,
   Plus,
   Shield,
-  FileCheck
+  FileCheck,
+  ChevronLeft,
+  ChevronRight,
+  Check
 } from 'lucide-react';
 import {
   getMyProfile,
@@ -23,8 +26,15 @@ import {
   deleteMyResume,
 } from '../services/profileService';
 
+const STEPS = [
+  { id: 1, title: 'Overview & Skills', subtitle: 'Headline, bio & tech stack', icon: User },
+  { id: 2, title: 'Experience & Education', subtitle: 'Work history & degrees', icon: Briefcase },
+  { id: 3, title: 'Portfolio & Links', subtitle: 'GitHub, LinkedIn & websites', icon: Globe },
+  { id: 4, title: 'Secure Resume', subtitle: 'Upload & verify PDF', icon: FileText },
+];
+
 export default function CandidateProfileModal({ isOpen, onClose, onProfileUpdated }) {
-  const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'experience' | 'links' | 'resume'
+  const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
@@ -44,6 +54,9 @@ export default function CandidateProfileModal({ isOpen, onClose, onProfileUpdate
     website: '',
   });
 
+  // Track initial data to detect unsaved changes
+  const initialDataRef = useRef(null);
+
   // Resume Upload States
   const [resumeMeta, setResumeMeta] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -57,17 +70,36 @@ export default function CandidateProfileModal({ isOpen, onClose, onProfileUpdate
     if (!isOpen) return;
 
     let isMounted = true;
+
     getMyProfile()
       .then((res) => {
         if (!isMounted) return;
         const prof = res.data || {};
-        setHeadline(prof.headline || '');
-        setSummary(prof.summary || '');
-        setSkills(prof.skills || []);
-        setEducation(prof.education || []);
-        setExperience(prof.experience || []);
-        setPortfolioLinks(prof.portfolioLinks || { github: '', linkedin: '', portfolio: '', website: '' });
+        const loadedHeadline = prof.headline || '';
+        const loadedSummary = prof.summary || '';
+        const loadedSkills = prof.skills || [];
+        const loadedEducation = prof.education || [];
+        const loadedExperience = prof.experience || [];
+        const loadedLinks = prof.portfolioLinks || { github: '', linkedin: '', portfolio: '', website: '' };
+
+        setHeadline(loadedHeadline);
+        setSummary(loadedSummary);
+        setSkills(loadedSkills);
+        setEducation(loadedEducation);
+        setExperience(loadedExperience);
+        setPortfolioLinks(loadedLinks);
         setResumeMeta(prof.resume || null);
+
+        // Cache initial values for dirty checking
+        initialDataRef.current = {
+          headline: loadedHeadline,
+          summary: loadedSummary,
+          skills: [...loadedSkills],
+          education: JSON.parse(JSON.stringify(loadedEducation)),
+          experience: JSON.parse(JSON.stringify(loadedExperience)),
+          portfolioLinks: { ...loadedLinks },
+        };
+
         setLoading(false);
       })
       .catch((err) => {
@@ -81,10 +113,34 @@ export default function CandidateProfileModal({ isOpen, onClose, onProfileUpdate
     };
   }, [isOpen]);
 
+  // Dirty state checker
+  const hasUnsavedChanges = useCallback(() => {
+    if (!initialDataRef.current) return false;
+    const init = initialDataRef.current;
+    if (headline !== init.headline) return true;
+    if (summary !== init.summary) return true;
+    if (JSON.stringify(skills) !== JSON.stringify(init.skills)) return true;
+    if (JSON.stringify(education) !== JSON.stringify(init.education)) return true;
+    if (JSON.stringify(experience) !== JSON.stringify(init.experience)) return true;
+    if (JSON.stringify(portfolioLinks) !== JSON.stringify(init.portfolioLinks)) return true;
+    return false;
+  }, [headline, summary, skills, education, experience, portfolioLinks]);
+
+  // Safe close handler with unsaved changes prompt
+  const handleRequestClose = useCallback(() => {
+    if (hasUnsavedChanges() && !saving) {
+      const confirmDiscard = window.confirm(
+        'You have unsaved changes in your candidate profile. Are you sure you want to close without saving?'
+      );
+      if (!confirmDiscard) return;
+    }
+    onClose();
+  }, [hasUnsavedChanges, saving, onClose]);
+
   // Handle escape key
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') handleRequestClose();
     };
     if (isOpen) {
       window.addEventListener('keydown', handleKeyDown);
@@ -94,7 +150,7 @@ export default function CandidateProfileModal({ isOpen, onClose, onProfileUpdate
       window.removeEventListener('keydown', handleKeyDown);
       document.body.style.overflow = 'unset';
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, handleRequestClose]);
 
   if (!isOpen) return null;
 
@@ -148,9 +204,143 @@ export default function CandidateProfileModal({ isOpen, onClose, onProfileUpdate
     setEducation(education.filter((_, i) => i !== index));
   };
 
-  // Save full profile details
+  // Step Validation Logic
+  const validateStep = (stepNumber) => {
+    if (stepNumber === 1) {
+      if (headline.length > 120) {
+        return 'Professional headline cannot exceed 120 characters.';
+      }
+      if (summary.length > 2000) {
+        return 'Professional summary cannot exceed 2,000 characters.';
+      }
+      // If user typed a skill without pressing enter, auto-add it
+      if (skillInput.trim()) {
+        const clean = skillInput.trim();
+        if (!skills.includes(clean)) {
+          setSkills((prev) => [...prev, clean]);
+          setSkillInput('');
+        }
+      }
+      return null;
+    }
+
+    if (stepNumber === 2) {
+      for (let i = 0; i < experience.length; i++) {
+        const exp = experience[i];
+        const hasAnyField = exp.title?.trim() || exp.company?.trim() || exp.description?.trim();
+        if (hasAnyField) {
+          if (!exp.title?.trim()) {
+            return `Please provide a Job Title for Role #${i + 1}, or remove it.`;
+          }
+          if (!exp.company?.trim()) {
+            return `Please provide a Company name for Role #${i + 1}, or remove it.`;
+          }
+        }
+      }
+
+      for (let i = 0; i < education.length; i++) {
+        const edu = education[i];
+        const hasAnyField = edu.school?.trim() || edu.degree?.trim() || edu.fieldOfStudy?.trim();
+        if (hasAnyField) {
+          if (!edu.school?.trim()) {
+            return `Please provide an Institution for Education #${i + 1}, or remove it.`;
+          }
+        }
+      }
+      return null;
+    }
+
+    if (stepNumber === 3) {
+      const isValidUrl = (urlStr) => {
+        if (!urlStr || !urlStr.trim()) return true;
+        try {
+          const parsed = new URL(urlStr.trim());
+          return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+        } catch {
+          return false;
+        }
+      };
+
+      if (portfolioLinks.github && !isValidUrl(portfolioLinks.github)) {
+        return 'Please enter a valid GitHub URL (including https://).';
+      }
+      if (portfolioLinks.linkedin && !isValidUrl(portfolioLinks.linkedin)) {
+        return 'Please enter a valid LinkedIn URL (including https://).';
+      }
+      if (portfolioLinks.portfolio && !isValidUrl(portfolioLinks.portfolio)) {
+        return 'Please enter a valid Portfolio URL (including https://).';
+      }
+      if (portfolioLinks.website && !isValidUrl(portfolioLinks.website)) {
+        return 'Please enter a valid Website URL (including https://).';
+      }
+      return null;
+    }
+
+    return null;
+  };
+
+  // Next step navigation
+  const handleNextStep = () => {
+    setError(null);
+    const validationErr = validateStep(currentStep);
+    if (validationErr) {
+      setError(validationErr);
+      return;
+    }
+    setCurrentStep((prev) => Math.min(prev + 1, 4));
+  };
+
+  // Previous step navigation
+  const handlePrevStep = () => {
+    setError(null);
+    setCurrentStep((prev) => Math.max(prev - 1, 1));
+  };
+
+  // Direct step pill navigation
+  const handleStepClick = (targetStep) => {
+    if (targetStep === currentStep) return;
+    setError(null);
+
+    // If moving backward, allow freely
+    if (targetStep < currentStep) {
+      setCurrentStep(targetStep);
+      return;
+    }
+
+    // If moving forward, validate current step first
+    const validationErr = validateStep(currentStep);
+    if (validationErr) {
+      setError(validationErr);
+      return;
+    }
+    setCurrentStep(targetStep);
+  };
+
+  // Save full profile details (Step 4 main action)
   const handleSaveProfile = async (e) => {
     if (e) e.preventDefault();
+    if (saving) return; // Prevent accidental duplicate submissions
+
+    // Validate all steps before final save
+    const step1Err = validateStep(1);
+    if (step1Err) {
+      setError(step1Err);
+      setCurrentStep(1);
+      return;
+    }
+    const step2Err = validateStep(2);
+    if (step2Err) {
+      setError(step2Err);
+      setCurrentStep(2);
+      return;
+    }
+    const step3Err = validateStep(3);
+    if (step3Err) {
+      setError(step3Err);
+      setCurrentStep(3);
+      return;
+    }
+
     setSaving(true);
     setError(null);
     setSuccessMsg(null);
@@ -165,9 +355,19 @@ export default function CandidateProfileModal({ isOpen, onClose, onProfileUpdate
         portfolioLinks,
       });
 
-      setSuccessMsg('Profile updated successfully!');
+      // Update initial ref to current saved data
+      initialDataRef.current = {
+        headline: headline.trim(),
+        summary: summary.trim(),
+        skills: [...skills],
+        education: JSON.parse(JSON.stringify(education)),
+        experience: JSON.parse(JSON.stringify(experience)),
+        portfolioLinks: { ...portfolioLinks },
+      };
+
+      setSuccessMsg('Candidate profile updated successfully!');
       if (onProfileUpdated) onProfileUpdated(res.data);
-      setTimeout(() => setSuccessMsg(null), 3000);
+      setTimeout(() => setSuccessMsg(null), 3500);
     } catch (err) {
       setError(err.message || 'Failed to save profile changes');
     } finally {
@@ -180,10 +380,8 @@ export default function CandidateProfileModal({ isOpen, onClose, onProfileUpdate
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Reset input value so same file can be selected again if needed
     e.target.value = '';
 
-    // Client-side validations
     if (!file.name.toLowerCase().endsWith('.pdf')) {
       setUploadError('Only PDF files (.pdf) are allowed.');
       return;
@@ -246,10 +444,12 @@ export default function CandidateProfileModal({ isOpen, onClose, onProfileUpdate
     }
   };
 
+  const progressPercent = Math.round((currentStep / 4) * 100);
+
   return (
     <div 
       className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex justify-center items-center p-3 sm:p-6 transition-opacity"
-      onClick={onClose}
+      onClick={handleRequestClose}
     >
       <div 
         className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden relative animate-in fade-in zoom-in-95 duration-200"
@@ -263,15 +463,15 @@ export default function CandidateProfileModal({ isOpen, onClose, onProfileUpdate
             </div>
             <div>
               <h2 className="text-base font-bold text-slate-900 leading-tight">
-                Candidate Profile & Resume
+                Candidate Profile Wizard
               </h2>
               <p className="text-xs text-slate-500">
-                Showcase your engineering experience and manage your verified PDF resume.
+                Complete your profile and manage your verified PDF resume in 4 guided steps.
               </p>
             </div>
           </div>
           <button
-            onClick={onClose}
+            onClick={handleRequestClose}
             className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
             aria-label="Close dialog"
           >
@@ -279,62 +479,64 @@ export default function CandidateProfileModal({ isOpen, onClose, onProfileUpdate
           </button>
         </div>
 
-        {/* Tab Navigation */}
-        <div className="flex items-center border-b border-slate-200 bg-white px-5 overflow-x-auto text-xs font-semibold scrollbar-none">
-          <button
-            type="button"
-            onClick={() => setActiveTab('overview')}
-            className={`py-3 px-3 border-b-2 flex items-center gap-1.5 transition-colors whitespace-nowrap ${
-              activeTab === 'overview'
-                ? 'border-slate-900 text-slate-900'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            <User className="w-3.5 h-3.5" />
-            <span>Overview & Skills</span>
-          </button>
+        {/* Guided Wizard Step Indicator & Progress */}
+        <div className="px-5 pt-4 pb-3 border-b border-slate-100 bg-white">
+          <div className="flex items-center justify-between text-xs text-slate-500 mb-1.5">
+            <span className="font-semibold text-slate-800">
+              Step {currentStep} of 4: <span className="text-slate-600 font-normal">{STEPS[currentStep - 1].title}</span>
+            </span>
+            <span className="font-medium text-slate-500">{progressPercent}% Completed</span>
+          </div>
 
-          <button
-            type="button"
-            onClick={() => setActiveTab('experience')}
-            className={`py-3 px-3 border-b-2 flex items-center gap-1.5 transition-colors whitespace-nowrap ${
-              activeTab === 'experience'
-                ? 'border-slate-900 text-slate-900'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            <Briefcase className="w-3.5 h-3.5" />
-            <span>Experience & Education ({experience.length + education.length})</span>
-          </button>
+          {/* Progress Bar */}
+          <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden mb-3">
+            <div 
+              className="bg-slate-900 h-1.5 rounded-full transition-all duration-300 ease-out" 
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
 
-          <button
-            type="button"
-            onClick={() => setActiveTab('links')}
-            className={`py-3 px-3 border-b-2 flex items-center gap-1.5 transition-colors whitespace-nowrap ${
-              activeTab === 'links'
-                ? 'border-slate-900 text-slate-900'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            <Globe className="w-3.5 h-3.5" />
-            <span>Portfolio & Links</span>
-          </button>
+          {/* Wizard Step Pills */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {STEPS.map((step) => {
+              const isCompleted = currentStep > step.id;
+              const isCurrent = currentStep === step.id;
+              const IconComp = step.icon;
 
-          <button
-            type="button"
-            onClick={() => setActiveTab('resume')}
-            className={`py-3 px-3 border-b-2 flex items-center gap-1.5 transition-colors whitespace-nowrap ${
-              activeTab === 'resume'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            <FileText className="w-3.5 h-3.5" />
-            <span>Secure Resume</span>
-            {resumeMeta?.originalName && (
-              <span className="w-2 h-2 rounded-full bg-emerald-500 ml-0.5"></span>
-            )}
-          </button>
+              return (
+                <button
+                  key={step.id}
+                  type="button"
+                  onClick={() => handleStepClick(step.id)}
+                  className={`flex items-center gap-2 p-2 rounded-xl text-left transition-all ${
+                    isCurrent
+                      ? 'bg-slate-900 text-white shadow-xs'
+                      : isCompleted
+                      ? 'bg-slate-100 hover:bg-slate-200/80 text-slate-800'
+                      : 'bg-slate-50 text-slate-400 hover:text-slate-600'
+                  }`}
+                >
+                  <div
+                    className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 text-xs font-bold ${
+                      isCurrent
+                        ? 'bg-white/20 text-white'
+                        : isCompleted
+                        ? 'bg-emerald-600 text-white'
+                        : 'bg-slate-200 text-slate-600'
+                    }`}
+                  >
+                    {isCompleted ? <Check className="w-3.5 h-3.5" /> : step.id}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[11px] font-bold truncate leading-tight flex items-center gap-1">
+                      <IconComp className="w-3 h-3 shrink-0 opacity-80" />
+                      <span className="truncate">{step.title}</span>
+                    </p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* Content Body */}
@@ -366,9 +568,14 @@ export default function CandidateProfileModal({ isOpen, onClose, onProfileUpdate
                 </div>
               )}
 
-              {/* TAB 1: Overview & Skills */}
-              {activeTab === 'overview' && (
-                <div className="space-y-4">
+              {/* STEP 1: Overview & Skills */}
+              {currentStep === 1 && (
+                <div className="space-y-4 animate-in fade-in duration-150">
+                  <div className="border-b border-slate-100 pb-2">
+                    <h3 className="text-sm font-bold text-slate-900">Step 1: Professional Overview & Skills</h3>
+                    <p className="text-xs text-slate-500">Provide your primary headline, technical background, and key competencies.</p>
+                  </div>
+
                   <div>
                     <label className="block text-xs font-bold text-slate-800 mb-1">
                       Professional Headline
@@ -457,16 +664,21 @@ export default function CandidateProfileModal({ isOpen, onClose, onProfileUpdate
                 </div>
               )}
 
-              {/* TAB 2: Experience & Education */}
-              {activeTab === 'experience' && (
-                <div className="space-y-6">
+              {/* STEP 2: Experience & Education */}
+              {currentStep === 2 && (
+                <div className="space-y-6 animate-in fade-in duration-150">
+                  <div className="border-b border-slate-100 pb-2">
+                    <h3 className="text-sm font-bold text-slate-900">Step 2: Experience & Education</h3>
+                    <p className="text-xs text-slate-500">Document your relevant professional roles and academic background.</p>
+                  </div>
+
                   {/* Experience Section */}
                   <div>
                     <div className="flex items-center justify-between mb-3">
                       <div>
-                        <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                        <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
                           Work Experience
-                        </h3>
+                        </h4>
                         <p className="text-[11px] text-slate-500">Add engineering positions and impact.</p>
                       </div>
                       <button
@@ -482,7 +694,7 @@ export default function CandidateProfileModal({ isOpen, onClose, onProfileUpdate
                     <div className="space-y-3">
                       {experience.length === 0 ? (
                         <div className="p-4 rounded-xl border border-dashed border-slate-200 text-center text-xs text-slate-400">
-                          No work experience added yet. Click &quot;Add Role&quot; above.
+                          No work experience added yet. Click &quot;Add Role&quot; above to list positions.
                         </div>
                       ) : (
                         experience.map((exp, idx) => (
@@ -555,9 +767,9 @@ export default function CandidateProfileModal({ isOpen, onClose, onProfileUpdate
                   <div className="pt-4 border-t border-slate-100">
                     <div className="flex items-center justify-between mb-3">
                       <div>
-                        <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                          Education
-                        </h3>
+                        <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                          Education & Certifications
+                        </h4>
                         <p className="text-[11px] text-slate-500">Degrees, certifications or bootcamps.</p>
                       </div>
                       <button
@@ -613,12 +825,15 @@ export default function CandidateProfileModal({ isOpen, onClose, onProfileUpdate
                 </div>
               )}
 
-              {/* TAB 3: Portfolio & Links */}
-              {activeTab === 'links' && (
-                <div className="space-y-4">
-                  <p className="text-xs text-slate-500">
-                    Add verified profiles so engineering managers can evaluate your open source contributions and portfolio.
-                  </p>
+              {/* STEP 3: Portfolio & Links */}
+              {currentStep === 3 && (
+                <div className="space-y-4 animate-in fade-in duration-150">
+                  <div className="border-b border-slate-100 pb-2">
+                    <h3 className="text-sm font-bold text-slate-900">Step 3: Portfolio & Verified Links</h3>
+                    <p className="text-xs text-slate-500">
+                      Add verified URLs so engineering managers can evaluate your open source contributions, repositories, and portfolio.
+                    </p>
+                  </div>
 
                   <div>
                     <label className="block text-xs font-bold text-slate-800 mb-1">
@@ -635,7 +850,7 @@ export default function CandidateProfileModal({ isOpen, onClose, onProfileUpdate
 
                   <div>
                     <label className="block text-xs font-bold text-slate-800 mb-1">
-                      LinkedIn URL
+                      LinkedIn Profile URL
                     </label>
                     <input
                       type="url"
@@ -648,7 +863,7 @@ export default function CandidateProfileModal({ isOpen, onClose, onProfileUpdate
 
                   <div>
                     <label className="block text-xs font-bold text-slate-800 mb-1">
-                      Personal Portfolio / Website
+                      Personal Portfolio / Website URL
                     </label>
                     <input
                       type="url"
@@ -661,13 +876,20 @@ export default function CandidateProfileModal({ isOpen, onClose, onProfileUpdate
                 </div>
               )}
 
-              {/* TAB 4: Secure Resume */}
-              {activeTab === 'resume' && (
-                <div className="space-y-5">
+              {/* STEP 4: Secure Resume */}
+              {currentStep === 4 && (
+                <div className="space-y-5 animate-in fade-in duration-150">
+                  <div className="border-b border-slate-100 pb-2">
+                    <h3 className="text-sm font-bold text-slate-900">Step 4: Secure Resume Verification & Final Review</h3>
+                    <p className="text-xs text-slate-500">
+                      Upload your technical resume in PDF format. When ready, click &quot;Save Profile Changes&quot; below to commit your profile.
+                    </p>
+                  </div>
+
                   <div className="p-4 rounded-xl bg-blue-50/70 border border-blue-100 flex items-start gap-3">
                     <Shield className="w-5 h-5 text-blue-600 mt-0.5 shrink-0" />
                     <div>
-                      <h3 className="text-xs font-bold text-blue-900">Zero-Public Storage Security</h3>
+                      <h4 className="text-xs font-bold text-blue-900">Zero-Public Storage Security</h4>
                       <p className="text-xs text-blue-700 mt-0.5 leading-relaxed">
                         Your resume is stored securely in private object storage with binary signature validation (%PDF-). It is never indexed or accessible publicly; only employers whose job postings you actively apply to are granted authorized access.
                       </p>
@@ -795,37 +1017,77 @@ export default function CandidateProfileModal({ isOpen, onClose, onProfileUpdate
                       </div>
                     </div>
                   )}
+
+                  {/* Summary Review of Profile Changes */}
+                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600 space-y-1.5">
+                    <p className="font-semibold text-slate-800">Ready to save?</p>
+                    <p className="text-[11px] text-slate-500">
+                      Headline: <span className="text-slate-700 font-medium">{headline || 'Not set'}</span> • 
+                      Skills: <span className="text-slate-700 font-medium">{skills.length} added</span> • 
+                      Experience: <span className="text-slate-700 font-medium">{experience.length} roles</span> • 
+                      Education: <span className="text-slate-700 font-medium">{education.length} listed</span>
+                    </p>
+                  </div>
                 </div>
               )}
             </>
           )}
         </div>
 
-        {/* Modal Footer */}
-        <div className="p-4 border-t border-slate-100 bg-slate-50/70 flex justify-between items-center">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 transition-colors"
-          >
-            Cancel
-          </button>
-
-          <button
-            type="button"
-            onClick={handleSaveProfile}
-            disabled={saving || loading}
-            className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {saving ? (
-              <>
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                <span>Saving Profile...</span>
-              </>
-            ) : (
-              <span>Save Profile Changes</span>
+        {/* Modal Wizard Navigation Footer */}
+        <div className="p-4 border-t border-slate-100 bg-slate-50/70 flex flex-wrap justify-between items-center gap-2">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleRequestClose}
+              className="px-3.5 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 transition-colors"
+            >
+              Cancel
+            </button>
+            {currentStep > 1 && (
+              <button
+                type="button"
+                onClick={handlePrevStep}
+                disabled={saving}
+                className="px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-xs font-semibold text-slate-700 flex items-center gap-1.5 transition-colors disabled:opacity-50"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                <span>Previous</span>
+              </button>
             )}
-          </button>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {currentStep < 4 ? (
+              <button
+                type="button"
+                onClick={handleNextStep}
+                className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm"
+              >
+                <span>Next Step</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleSaveProfile}
+                disabled={saving || loading}
+                className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {saving ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Saving Profile...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    <span>Save Profile Changes</span>
+                  </>
+                )}
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>

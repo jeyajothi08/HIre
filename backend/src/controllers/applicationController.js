@@ -1,6 +1,8 @@
 import mongoose from 'mongoose';
 import Application, { APPLICATION_STATUSES } from '../models/Application.js';
 import Job from '../models/Job.js';
+import User from '../models/User.js';
+import { createNotification } from '../services/notificationService.js';
 import { getDBStatus } from '../config/db.js';
 
 /**
@@ -96,6 +98,26 @@ export const createApplication = async (req, res, next) => {
       coverLetter: trimmedCoverLetter,
       status: 'Pending',
     });
+
+    // Notify the employer who posted the job (non-blocking)
+    if (employerId) {
+      User.findById(employerId).select('email').lean()
+        .then((employerUser) => {
+          return createNotification({
+            recipient: employerId,
+            type: 'new_application',
+            title: `New Application for ${job.title}`,
+            message: `${req.user.name} applied for "${job.title}".`,
+            job: job._id,
+            application: application._id,
+            idempotencyKey: `new_app_${application._id}`,
+            recipientEmail: employerUser?.email || null,
+          });
+        })
+        .catch((notifErr) => {
+          console.warn('[ApplicationController] Failed to dispatch employer notification:', notifErr.message);
+        });
+    }
 
     res.status(201).json({
       success: true,
@@ -270,7 +292,9 @@ export const updateApplicationStatus = async (req, res, next) => {
       });
     }
 
-    const application = await Application.findById(id).populate('job', 'createdBy title');
+    const application = await Application.findById(id)
+      .populate('job', 'createdBy title')
+      .populate('applicant', 'name email');
     if (!application) {
       return res.status(404).json({
         success: false,
@@ -292,6 +316,26 @@ export const updateApplicationStatus = async (req, res, next) => {
 
     application.status = status;
     await application.save();
+
+    // Notify the applicant jobseeker of the status change (non-blocking)
+    const applicantId = application.applicant?._id || application.applicant;
+    const applicantEmail = application.applicant?.email || null;
+    const jobTitle = application.job?.title || 'Job';
+
+    if (applicantId) {
+      createNotification({
+        recipient: applicantId,
+        type: 'status_update',
+        title: `Application Status: ${status}`,
+        message: `Your application for "${jobTitle}" has been updated to "${status}".`,
+        job: application.job?._id || application.job,
+        application: application._id,
+        idempotencyKey: `status_${application._id}_${status}`,
+        recipientEmail: applicantEmail,
+      }).catch((notifErr) => {
+        console.warn('[ApplicationController] Failed to dispatch status notification:', notifErr.message);
+      });
+    }
 
     res.status(200).json({
       success: true,

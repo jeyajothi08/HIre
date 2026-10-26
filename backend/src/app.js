@@ -8,6 +8,7 @@ import jobRoutes from './routes/jobRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import applicationRoutes from './routes/applicationRoutes.js';
 import profileRoutes from './routes/profileRoutes.js';
+import notificationRoutes from './routes/notificationRoutes.js';
 import { notFound, errorHandler } from './middleware/errorHandler.js';
 
 const app = express();
@@ -55,6 +56,7 @@ app.get('/', (req, res) => {
       auth: '/api/v1/auth',
       applications: '/api/v1/applications',
       profile: '/api/v1/profile',
+      notifications: '/api/v1/notifications',
     },
   });
 });
@@ -65,6 +67,7 @@ app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/jobs', jobRoutes);
 app.use('/api/v1/applications', applicationRoutes);
 app.use('/api/v1/profile', profileRoutes);
+app.use('/api/v1/notifications', notificationRoutes);
 
 // Error handling middleware
 app.use(notFound);
