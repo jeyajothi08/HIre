@@ -1,119 +1,159 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Search, 
   MapPin, 
   Briefcase, 
   DollarSign, 
   ChevronRight, 
+  ChevronLeft,
   ArrowUpRight, 
   Building2, 
   Sparkles, 
   Menu, 
   X,
-  Bookmark
+  Bookmark,
+  AlertCircle,
+  RefreshCw
 } from 'lucide-react';
+import { getJobs, formatSalary, formatRelativeTime } from './services/jobService';
+import JobDetailsModal from './components/JobDetailsModal';
 
-const FEATURED_JOBS = [
-  {
-    id: 1,
-    title: 'Senior Frontend Engineer',
-    company: 'Linear Labs',
-    location: 'Remote (US / Europe)',
-    type: 'Full-time',
-    category: 'Engineering',
-    salary: '$140k – $175k',
-    postedAt: '2h ago',
-    featured: true,
-    tags: ['React', 'TypeScript', 'Tailwind', 'Next.js'],
-  },
-  {
-    id: 2,
-    title: 'Full Stack Developer',
-    company: 'Vercel Ecosystem',
-    location: 'San Francisco, CA • Hybrid',
-    type: 'Full-time',
-    category: 'Engineering',
-    salary: '$130k – $160k',
-    postedAt: '5h ago',
-    featured: true,
-    tags: ['Node.js', 'Express', 'React', 'MongoDB'],
-  },
-  {
-    id: 3,
-    title: 'Product Designer (Design Systems)',
-    company: 'Stripe Studios',
-    location: 'Remote (Global)',
-    type: 'Full-time',
-    category: 'Design',
-    salary: '$125k – $155k',
-    postedAt: '1d ago',
-    featured: false,
-    tags: ['Figma', 'Design Systems', 'UI/UX'],
-  },
-  {
-    id: 4,
-    title: 'Backend Engineer (Node & Distributed Systems)',
-    company: 'Supabase Partner',
-    location: 'Bangalore, India • Hybrid',
-    type: 'Full-time',
-    category: 'Engineering',
-    salary: '₹24L – ₹35L',
-    postedAt: '1d ago',
-    featured: false,
-    tags: ['Node.js', 'PostgreSQL', 'Docker', 'Redis'],
-  },
-  {
-    id: 5,
-    title: 'Technical Product Manager',
-    company: 'Retool Collective',
-    location: 'New York, NY • On-site',
-    type: 'Contract',
-    category: 'Product',
-    salary: '$110k – $140k',
-    postedAt: '2d ago',
-    featured: false,
-    tags: ['API Design', 'Roadmap', 'Agile'],
-  },
-];
+const WORKPLACE_TABS = ['All', 'Remote', 'Hybrid', 'On-site'];
+const TRENDING_TAGS = ['Remote', 'React', 'Node.js', 'TypeScript', 'MongoDB', 'Design Systems'];
 
 export default function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  
+  // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
   const [locationQuery, setLocationQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('All');
-  const [savedJobs, setSavedJobs] = useState(new Set([1]));
+  const [activeSearch, setActiveSearch] = useState('');
+  const [activeLocation, setActiveLocation] = useState('');
+  const [selectedWorkplace, setSelectedWorkplace] = useState('All');
+  const [retryCount, setRetryCount] = useState(0);
+  
+  // Data state
+  const [jobs, setJobs] = useState([]);
+  const [totalJobs, setTotalJobs] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  
+  // Saved jobs & Modal state
+  const [savedJobs, setSavedJobs] = useState(() => {
+    try {
+      const stored = localStorage.getItem('hirehub_saved_jobs');
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+  const [selectedJobId, setSelectedJobId] = useState(null);
 
-  const toggleSaveJob = (id) => {
+  // Sync saved jobs to localStorage
+  const toggleSaveJob = (id, e) => {
+    if (e) e.stopPropagation();
     setSavedJobs((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
+      try {
+        localStorage.setItem('hirehub_saved_jobs', JSON.stringify([...next]));
+      } catch {
+        // Ignore localStorage quota or private mode issues
+      }
       return next;
     });
   };
 
-  const categories = ['All', 'Engineering', 'Design', 'Product'];
+  // Fetch jobs whenever filters or page changes
+  useEffect(() => {
+    let active = true;
 
-  const filteredJobs = FEATURED_JOBS.filter((job) => {
-    const matchesCategory = selectedCategory === 'All' || job.category === selectedCategory;
-    const matchesSearch = 
-      job.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      job.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      job.tags.some(t => t.toLowerCase().includes(searchQuery.toLowerCase()));
-    const matchesLocation = 
-      locationQuery === '' || job.location.toLowerCase().includes(locationQuery.toLowerCase());
-    return matchesCategory && matchesSearch && matchesLocation;
-  });
+    const params = {
+      page: currentPage,
+      limit: 5,
+      search: activeSearch,
+      location: activeLocation,
+      workplaceType: selectedWorkplace,
+    };
+
+    getJobs(params)
+      .then((res) => {
+        if (!active) return;
+        if (res.success) {
+          setJobs(res.data || []);
+          setTotalJobs(res.total || 0);
+          setTotalPages(res.totalPages || 1);
+        } else {
+          setError(res.message || 'Failed to fetch jobs');
+        }
+      })
+      .catch((err) => {
+        if (!active) return;
+        console.error('Error fetching jobs:', err);
+        setError(err.message || 'Could not connect to HireHub API server. Please ensure the backend is running.');
+        setJobs([]);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [currentPage, activeSearch, activeLocation, selectedWorkplace, retryCount]);
+
+  // Handle URL hash for direct job link opening (e.g. #job-<id>)
+  useEffect(() => {
+    const checkHash = () => {
+      const hash = window.location.hash;
+      if (hash && hash.startsWith('#job-')) {
+        const id = hash.replace('#job-', '');
+        if (id) setSelectedJobId(id);
+      }
+    };
+    checkHash();
+    window.addEventListener('hashchange', checkHash);
+    return () => window.removeEventListener('hashchange', checkHash);
+  }, []);
+
+  const openJobModal = (id) => {
+    setSelectedJobId(id);
+  };
+
+  const closeJobModal = () => {
+    setSelectedJobId(null);
+  };
+
+  // Handle search submission
+  const handleSearchSubmit = (e) => {
+    if (e) e.preventDefault();
+    setActiveSearch(searchQuery);
+    setActiveLocation(locationQuery);
+    setCurrentPage(1);
+  };
+
+  // Reset filters
+  const handleResetFilters = () => {
+    setSearchQuery('');
+    setLocationQuery('');
+    setActiveSearch('');
+    setActiveLocation('');
+    setSelectedWorkplace('All');
+    setCurrentPage(1);
+  };
 
   return (
     <div className="min-h-screen bg-[#FAFAFA] text-slate-900 font-sans flex flex-col antialiased selection:bg-slate-900 selection:text-white">
       {/* Top Notice Banner */}
       <div className="bg-slate-900 text-slate-300 text-xs py-2 px-4 text-center border-b border-slate-800">
-        <span className="font-medium text-white">HireHub Preview v1.0:</span> Currently connecting verified hiring teams with ambitious engineers. No agency spam.
+        <span className="font-medium text-white">HireHub Live API v1.0:</span> Real-time verified engineering roles backed by MongoDB Atlas.
       </div>
 
       {/* Navigation */}
-      <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-slate-200/80">
+      <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-200/80">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           {/* Brand */}
           <div className="flex items-center space-x-8">
@@ -128,9 +168,11 @@ export default function App() {
 
             <nav className="hidden md:flex items-center space-x-6 text-sm font-medium text-slate-600">
               <a href="#jobs" className="text-slate-900 transition-colors">Find Jobs</a>
-              <a href="#companies" className="hover:text-slate-900 transition-colors">Companies</a>
-              <a href="#salaries" className="hover:text-slate-900 transition-colors">Salaries</a>
               <a href="#about" className="hover:text-slate-900 transition-colors">Why HireHub</a>
+              <a href="http://localhost:5001/api/v1/health" target="_blank" rel="noreferrer" className="hover:text-slate-900 transition-colors flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                <span>API Status</span>
+              </a>
             </nav>
           </div>
 
@@ -144,16 +186,17 @@ export default function App() {
             </button>
             <button 
               type="button" 
+              onClick={() => alert('Employer Job Posting portal is coming in Phase 5!')}
               className="text-sm font-medium border border-slate-300 hover:border-slate-400 text-slate-800 px-3.5 py-2 rounded-lg transition-all hover:bg-slate-50"
             >
               Post a Job
             </button>
-            <button 
-              type="button" 
+            <a 
+              href="#jobs" 
               className="text-sm font-medium bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-lg transition-colors shadow-sm"
             >
-              Get Started
-            </button>
+              Explore Roles
+            </a>
           </div>
 
           {/* Mobile Menu Button */}
@@ -171,12 +214,17 @@ export default function App() {
         {/* Mobile Navigation Dropdown */}
         {mobileMenuOpen && (
           <div className="md:hidden border-b border-slate-200 bg-white px-4 pt-3 pb-6 space-y-3">
-            <a href="#jobs" className="block text-sm font-medium text-slate-800 py-1.5">Find Jobs</a>
-            <a href="#companies" className="block text-sm font-medium text-slate-800 py-1.5">Companies</a>
-            <a href="#salaries" className="block text-sm font-medium text-slate-800 py-1.5">Salaries</a>
+            <a href="#jobs" onClick={() => setMobileMenuOpen(false)} className="block text-sm font-medium text-slate-800 py-1.5">Find Jobs</a>
+            <a href="#about" onClick={() => setMobileMenuOpen(false)} className="block text-sm font-medium text-slate-800 py-1.5">Why HireHub</a>
+            <a href="http://localhost:5001/api/v1/health" target="_blank" rel="noreferrer" className="block text-sm font-medium text-slate-800 py-1.5">API Status</a>
             <div className="pt-3 border-t border-slate-100 flex flex-col space-y-2">
               <button className="w-full text-center py-2 text-sm font-medium border border-slate-200 rounded-lg">Sign In</button>
-              <button className="w-full text-center py-2 text-sm font-medium bg-slate-900 text-white rounded-lg">Post a Job</button>
+              <button 
+                onClick={() => alert('Employer portal coming soon!')}
+                className="w-full text-center py-2 text-sm font-medium bg-slate-900 text-white rounded-lg"
+              >
+                Post a Job
+              </button>
             </div>
           </div>
         )}
@@ -187,9 +235,9 @@ export default function App() {
         {/* Subtle Pill */}
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-slate-200 bg-white text-xs font-medium text-slate-700 shadow-subtle mb-6">
           <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-          <span>Curated SaaS Careers Platform</span>
+          <span>Live MongoDB Jobs Feed</span>
           <span className="text-slate-300">•</span>
-          <span className="text-slate-500">100% Verified Salaries</span>
+          <span className="text-slate-500">100% Verified Tech Roles</span>
         </div>
 
         {/* Hero Title */}
@@ -202,7 +250,7 @@ export default function App() {
         </p>
 
         {/* Search & Filter Bar */}
-        <div className="mt-10 max-w-4xl mx-auto bg-white p-2 sm:p-2.5 rounded-2xl border border-slate-200 shadow-subtle">
+        <form onSubmit={handleSearchSubmit} className="mt-10 max-w-4xl mx-auto bg-white p-2 sm:p-2.5 rounded-2xl border border-slate-200 shadow-subtle text-left">
           <div className="grid grid-cols-1 md:grid-cols-12 gap-2">
             {/* Keyword Search */}
             <div className="md:col-span-5 flex items-center px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200/60 focus-within:border-slate-400 focus-within:bg-white transition-all">
@@ -221,7 +269,7 @@ export default function App() {
               <MapPin className="w-4 h-4 text-slate-400 mr-2.5 shrink-0" />
               <input
                 type="text"
-                placeholder="City, Country, or 'Remote'"
+                placeholder="City or Country (e.g. San Francisco)"
                 value={locationQuery}
                 onChange={(e) => setLocationQuery(e.target.value)}
                 className="w-full bg-transparent text-sm text-slate-900 placeholder-slate-400 focus:outline-none"
@@ -231,7 +279,7 @@ export default function App() {
             {/* Submit CTA */}
             <div className="md:col-span-3">
               <button 
-                type="button" 
+                type="submit" 
                 className="w-full h-full min-h-[44px] bg-slate-900 hover:bg-slate-800 text-white font-medium text-sm rounded-xl px-4 py-2.5 flex items-center justify-center space-x-2 transition-colors shadow-sm"
               >
                 <span>Find Opportunities</span>
@@ -240,48 +288,58 @@ export default function App() {
             </div>
           </div>
 
-          {/* Quick Filter Tags */}
+          {/* Quick Trending Tags */}
           <div className="mt-3 pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between px-2 gap-2 text-xs text-slate-500">
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="font-medium text-slate-700 mr-1">Trending:</span>
-              {['Remote', 'React.js', 'Node.js', 'Full Stack', 'Design Systems'].map((tag) => (
+              {TRENDING_TAGS.map((tag) => (
                 <button
+                  type="button"
                   key={tag}
-                  onClick={() => setSearchQuery(tag)}
-                  className="px-2.5 py-1 rounded-md bg-slate-100 hover:bg-slate-200/80 text-slate-700 font-medium transition-colors"
+                  onClick={() => {
+                    setSearchQuery(tag);
+                    setActiveSearch(tag);
+                    setCurrentPage(1);
+                  }}
+                  className={`px-2.5 py-1 rounded-md font-medium transition-colors ${
+                    activeSearch === tag 
+                      ? 'bg-slate-900 text-white' 
+                      : 'bg-slate-100 hover:bg-slate-200/80 text-slate-700'
+                  }`}
                 >
                   {tag}
                 </button>
               ))}
             </div>
-            {searchQuery && (
+            {(activeSearch || activeLocation || selectedWorkplace !== 'All') && (
               <button
-                onClick={() => { setSearchQuery(''); setLocationQuery(''); }}
+                type="button"
+                onClick={handleResetFilters}
                 className="text-xs text-blue-600 hover:underline font-medium"
               >
-                Clear filters
+                Clear all filters
               </button>
             )}
           </div>
-        </div>
+        </form>
 
         {/* Metrics Overview */}
         <div className="mt-12 grid grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto border-t border-slate-200/80 pt-8">
           <div className="text-left px-4">
-            <div className="text-2xl font-bold text-slate-900">1,240+</div>
-            <div className="text-xs text-slate-500 mt-0.5">Verified Active Roles</div>
+            <div className="text-2xl font-bold text-slate-900">{totalJobs}</div>
+            <div className="text-xs text-slate-500 mt-0.5">Active Roles in Atlas</div>
           </div>
           <div className="text-left px-4">
-            <div className="text-2xl font-bold text-slate-900">420+</div>
-            <div className="text-xs text-slate-500 mt-0.5">Top Tech Companies</div>
+            <div className="text-2xl font-bold text-slate-900">100%</div>
+            <div className="text-xs text-slate-500 mt-0.5">Verified Pay Bands</div>
           </div>
           <div className="text-left px-4">
-            <div className="text-2xl font-bold text-slate-900">86%</div>
-            <div className="text-xs text-slate-500 mt-0.5">Interview Response Rate</div>
+            <div className="text-2xl font-bold text-slate-900">7 Days</div>
+            <div className="text-xs text-slate-500 mt-0.5">Response SLA</div>
           </div>
           <div className="text-left px-4">
-            <div className="text-2xl font-bold text-slate-900">$135k</div>
-            <div className="text-xs text-slate-500 mt-0.5">Avg. Software Comp</div>
+            <div className="text-2xl font-bold text-slate-900">&lt;50ms</div>
+            <div className="text-xs text-slate-500 mt-0.5">API Query Latency</div>
           </div>
         </div>
       </section>
@@ -292,62 +350,133 @@ export default function App() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-6 border-b border-slate-200 gap-4">
           <div>
             <h2 className="text-2xl font-bold tracking-tight text-slate-900">Explore Open Roles</h2>
-            <p className="text-sm text-slate-500 mt-1">Showing {filteredJobs.length} real-time opportunities</p>
+            <p className="text-sm text-slate-500 mt-1">
+              {loading ? (
+                <span>Loading available opportunities...</span>
+              ) : (
+                <span>Showing {jobs.length} of {totalJobs} verified position{totalJobs === 1 ? '' : 's'}</span>
+              )}
+            </p>
           </div>
 
-          {/* Category Tabs */}
+          {/* Workplace Type Tabs */}
           <div className="flex items-center space-x-1.5 p-1 bg-slate-100 rounded-xl border border-slate-200/70">
-            {categories.map((cat) => (
+            {WORKPLACE_TABS.map((tab) => (
               <button
-                key={cat}
-                onClick={() => setSelectedCategory(cat)}
+                key={tab}
+                onClick={() => {
+                  setSelectedWorkplace(tab);
+                  setCurrentPage(1);
+                }}
                 className={`px-3.5 py-1.5 text-xs font-medium rounded-lg transition-all ${
-                  selectedCategory === cat 
-                    ? 'bg-white text-slate-900 shadow-sm border border-slate-200/80' 
+                  selectedWorkplace === tab 
+                    ? 'bg-white text-slate-900 shadow-sm border border-slate-200/80 font-semibold' 
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                {cat}
+                {tab}
               </button>
             ))}
           </div>
         </div>
 
-        {/* Job Cards Grid */}
+        {/* Error Banner */}
+        {error && (
+          <div className="mt-6 p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 flex items-start justify-between gap-3 text-xs sm:text-sm">
+            <div className="flex items-start gap-2.5">
+              <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+              <div>
+                <span className="font-semibold block">Failed to load jobs from backend</span>
+                <span className="text-rose-700 mt-0.5 block">{error}</span>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                setLoading(true);
+                setError(null);
+                setRetryCount((c) => c + 1);
+              }}
+              className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-medium rounded-lg text-xs flex items-center gap-1.5 shrink-0 transition-colors shadow-sm"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Retry</span>
+            </button>
+          </div>
+        )}
+
+        {/* Job Cards Container */}
         <div className="mt-6 space-y-3">
-          {filteredJobs.length === 0 ? (
+          {/* Skeleton Loading State */}
+          {loading && (
+            <div className="space-y-3">
+              {[1, 2, 3].map((n) => (
+                <div 
+                  key={n} 
+                  className="bg-white border border-slate-200 rounded-xl p-5 animate-pulse flex flex-col md:flex-row md:items-center justify-between gap-4"
+                >
+                  <div className="flex items-start space-x-4">
+                    <div className="w-12 h-12 rounded-xl bg-slate-200 shrink-0"></div>
+                    <div className="space-y-2.5">
+                      <div className="h-3.5 bg-slate-200 rounded w-32"></div>
+                      <div className="h-5 bg-slate-200 rounded w-64"></div>
+                      <div className="flex gap-2">
+                        <div className="h-3 bg-slate-100 rounded w-20"></div>
+                        <div className="h-3 bg-slate-100 rounded w-20"></div>
+                        <div className="h-3 bg-slate-100 rounded w-24"></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex md:flex-col items-end gap-2.5">
+                    <div className="flex gap-1.5">
+                      <div className="h-5 bg-slate-100 rounded w-16"></div>
+                      <div className="h-5 bg-slate-100 rounded w-16"></div>
+                    </div>
+                    <div className="h-8 bg-slate-200 rounded w-24"></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Empty Results State */}
+          {!loading && !error && jobs.length === 0 && (
             <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center">
-              <Building2 className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-              <h3 className="text-base font-semibold text-slate-800">No matching jobs found</h3>
-              <p className="text-xs text-slate-500 mt-1">Try adjusting your search criteria or clear filters to see all roles.</p>
+              <Building2 className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+              <h3 className="text-base font-semibold text-slate-900">No matching jobs found</h3>
+              <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+                No roles matched your current search and filters. Try adjusting your search query, location, or workplace type.
+              </p>
               <button
-                onClick={() => { setSearchQuery(''); setLocationQuery(''); setSelectedCategory('All'); }}
-                className="mt-4 px-4 py-2 bg-slate-900 text-white text-xs font-medium rounded-lg"
+                type="button"
+                onClick={handleResetFilters}
+                className="mt-4 px-4 py-2 bg-slate-900 text-white text-xs font-semibold rounded-lg hover:bg-slate-800 transition-colors shadow-sm"
               >
-                Reset Filters
+                Reset All Filters
               </button>
             </div>
-          ) : (
-            filteredJobs.map((job) => (
+          )}
+
+          {/* Real Jobs Rendered from MongoDB */}
+          {!loading && !error && jobs.length > 0 && (
+            jobs.map((job) => (
               <div 
-                key={job.id}
-                className="group bg-white border border-slate-200 hover:border-slate-300 hover:shadow-subtle rounded-xl p-5 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4"
+                key={job._id}
+                onClick={() => openJobModal(job._id)}
+                className="group bg-white border border-slate-200 hover:border-slate-300 hover:shadow-subtle rounded-xl p-5 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer"
               >
                 {/* Left: Job Meta & Title */}
                 <div className="flex items-start space-x-4">
                   <div className="w-12 h-12 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center font-bold text-slate-700 shrink-0 text-base group-hover:bg-slate-900 group-hover:text-white transition-colors">
-                    {job.company.charAt(0)}
+                    {job.company ? job.company.charAt(0) : 'H'}
                   </div>
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-xs font-semibold text-slate-600 tracking-wide">{job.company}</span>
-                      {job.featured && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200/80">
-                          Featured
-                        </span>
-                      )}
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200/80">
+                        {job.workplaceType}
+                      </span>
                       <span className="text-slate-300">•</span>
-                      <span className="text-xs text-slate-400">{job.postedAt}</span>
+                      <span className="text-xs text-slate-400">{formatRelativeTime(job.createdAt)}</span>
                     </div>
 
                     <h3 className="text-base font-bold text-slate-900 mt-1 group-hover:text-blue-600 transition-colors flex items-center gap-1.5">
@@ -363,11 +492,11 @@ export default function App() {
                       </span>
                       <span className="inline-flex items-center gap-1">
                         <Briefcase className="w-3.5 h-3.5 text-slate-400" />
-                        {job.type}
+                        {job.employmentType}
                       </span>
-                      <span className="inline-flex items-center gap-1 font-medium text-slate-800">
+                      <span className="inline-flex items-center gap-1 font-semibold text-slate-900">
                         <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
-                        {job.salary}
+                        {formatSalary(job.salaryMin, job.salaryMax)}
                       </span>
                     </div>
                   </div>
@@ -375,34 +504,44 @@ export default function App() {
 
                 {/* Right: Tags & Action Buttons */}
                 <div className="flex flex-wrap items-center md:flex-col md:items-end justify-between gap-3 pt-3 md:pt-0 border-t md:border-t-0 border-slate-100">
-                  <div className="flex flex-wrap gap-1.5">
-                    {job.tags.map((tag) => (
+                  <div className="flex flex-wrap gap-1.5 max-w-xs md:justify-end">
+                    {job.skills && job.skills.slice(0, 4).map((skill) => (
                       <span 
-                        key={tag}
+                        key={skill}
                         className="px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-[11px] font-medium"
                       >
-                        {tag}
+                        {skill}
                       </span>
                     ))}
+                    {job.skills && job.skills.length > 4 && (
+                      <span className="px-1.5 py-0.5 text-[10px] text-slate-400 font-medium">
+                        +{job.skills.length - 4}
+                      </span>
+                    )}
                   </div>
 
                   <div className="flex items-center space-x-2">
                     <button
-                      onClick={() => toggleSaveJob(job.id)}
+                      type="button"
+                      onClick={(e) => toggleSaveJob(job._id, e)}
                       className={`p-2 rounded-lg border transition-colors ${
-                        savedJobs.has(job.id)
+                        savedJobs.has(job._id)
                           ? 'border-blue-300 bg-blue-50 text-blue-600'
                           : 'border-slate-200 text-slate-400 hover:text-slate-700 hover:bg-slate-50'
                       }`}
                       aria-label="Save job"
                     >
-                      <Bookmark className="w-4 h-4" fill={savedJobs.has(job.id) ? "currentColor" : "none"} />
+                      <Bookmark className="w-4 h-4" fill={savedJobs.has(job._id) ? "currentColor" : "none"} />
                     </button>
                     <button 
                       type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openJobModal(job._id);
+                      }}
                       className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg transition-colors shadow-sm"
                     >
-                      Quick Apply
+                      View Details
                     </button>
                   </div>
                 </div>
@@ -410,6 +549,54 @@ export default function App() {
             ))
           )}
         </div>
+
+        {/* Real API Pagination Controls */}
+        {!loading && !error && totalPages > 1 && (
+          <div className="mt-8 flex flex-col sm:flex-row items-center justify-between border-t border-slate-200 pt-5 gap-4">
+            <span className="text-xs text-slate-500 font-medium">
+              Page <span className="font-bold text-slate-800">{currentPage}</span> of <span className="font-bold text-slate-800">{totalPages}</span> ({totalJobs} total jobs)
+            </span>
+
+            <div className="flex items-center space-x-2">
+              <button
+                type="button"
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage <= 1}
+                className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 transition-colors"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+                <span>Previous</span>
+              </button>
+
+              <div className="flex items-center space-x-1">
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((num) => (
+                  <button
+                    key={num}
+                    type="button"
+                    onClick={() => setCurrentPage(num)}
+                    className={`w-8 h-8 rounded-lg text-xs font-medium transition-all ${
+                      currentPage === num
+                        ? 'bg-slate-900 text-white shadow-sm font-semibold'
+                        : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    {num}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage >= totalPages}
+                className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 transition-colors"
+              >
+                <span>Next</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
       </section>
 
       {/* Why HireHub Minimal Feature Grid */}
@@ -458,29 +645,6 @@ export default function App() {
         </div>
       </section>
 
-      {/* Employer Banner CTA */}
-      <section className="py-12 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full">
-        <div className="bg-slate-900 rounded-2xl p-8 sm:p-12 text-white flex flex-col md:flex-row items-center justify-between gap-6 shadow-sm">
-          <div className="max-w-xl">
-            <span className="text-xs font-semibold tracking-wider uppercase text-blue-400">For Hiring Teams</span>
-            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight mt-1 text-white">
-              Hire vetted engineers in days, not months.
-            </h2>
-            <p className="text-sm text-slate-300 mt-2">
-              Post your role to a community of active developers, designers, and tech leaders. First job post is free.
-            </p>
-          </div>
-          <div className="shrink-0 flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-            <button className="px-6 py-3 rounded-xl bg-white hover:bg-slate-100 text-slate-900 font-semibold text-sm transition-all shadow-sm text-center">
-              Post a Role Now
-            </button>
-            <button className="px-6 py-3 rounded-xl border border-slate-700 hover:bg-slate-800 text-white font-medium text-sm transition-all text-center">
-              Schedule a Demo
-            </button>
-          </div>
-        </div>
-      </section>
-
       {/* Footer */}
       <footer className="mt-auto bg-white border-t border-slate-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -493,16 +657,29 @@ export default function App() {
           </div>
 
           <div className="flex items-center space-x-6 text-xs text-slate-500">
-            <span className="flex items-center gap-1.5">
+            <a 
+              href="http://localhost:5001/api/v1/health" 
+              target="_blank" 
+              rel="noreferrer"
+              className="flex items-center gap-1.5 hover:text-slate-800 transition-colors"
+            >
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              All systems operational
-            </span>
-            <a href="#" className="hover:text-slate-800 transition-colors">Privacy</a>
-            <a href="#" className="hover:text-slate-800 transition-colors">Terms</a>
-            <a href="#" className="hover:text-slate-800 transition-colors">Contact</a>
+              Atlas DB Connected
+            </a>
+            <a href="#jobs" className="hover:text-slate-800 transition-colors">Browse Jobs</a>
+            <a href="#about" className="hover:text-slate-800 transition-colors">About</a>
           </div>
         </div>
       </footer>
+
+      {/* Real Job Details Modal */}
+      <JobDetailsModal
+        jobId={selectedJobId}
+        isOpen={Boolean(selectedJobId)}
+        onClose={closeJobModal}
+        isSaved={selectedJobId ? savedJobs.has(selectedJobId) : false}
+        onToggleSave={(id) => toggleSaveJob(id)}
+      />
     </div>
   );
 }
