@@ -64,6 +64,14 @@ export default function CandidateProfileModal({ isOpen, onClose, onProfileUpdate
   const [uploadError, setUploadError] = useState(null);
   const [isDeletingResume, setIsDeletingResume] = useState(false);
   const fileInputRef = useRef(null);
+  const saveTimerRef = useRef(null);
+
+  // Clear save timer on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
+  }, []);
 
   // Load profile data on mount / open
   useEffect(() => {
@@ -128,6 +136,7 @@ export default function CandidateProfileModal({ isOpen, onClose, onProfileUpdate
 
   // Safe close handler with unsaved changes prompt
   const handleRequestClose = useCallback(() => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     if (hasUnsavedChanges() && !saving) {
       const confirmDiscard = window.confirm(
         'You have unsaved changes in your candidate profile. Are you sure you want to close without saving?'
@@ -214,12 +223,17 @@ export default function CandidateProfileModal({ isOpen, onClose, onProfileUpdate
         return 'Professional summary cannot exceed 2,000 characters.';
       }
       // If user typed a skill without pressing enter, auto-add it
+      let effectiveSkills = [...skills];
       if (skillInput.trim()) {
         const clean = skillInput.trim();
-        if (!skills.includes(clean)) {
-          setSkills((prev) => [...prev, clean]);
+        if (!effectiveSkills.includes(clean)) {
+          effectiveSkills.push(clean);
+          setSkills(effectiveSkills);
           setSkillInput('');
         }
+      }
+      if (effectiveSkills.length === 0) {
+        return 'Please add at least one technical skill before proceeding to the next step.';
       }
       return null;
     }
@@ -319,7 +333,7 @@ export default function CandidateProfileModal({ isOpen, onClose, onProfileUpdate
   // Save full profile details (Step 4 main action)
   const handleSaveProfile = async (e) => {
     if (e) e.preventDefault();
-    if (saving) return; // Prevent accidental duplicate submissions
+    if (saving || uploading) return; // Prevent duplicate submissions or saving while resume upload is in progress
 
     // Validate all steps before final save
     const step1Err = validateStep(1);
@@ -367,7 +381,10 @@ export default function CandidateProfileModal({ isOpen, onClose, onProfileUpdate
 
       setSuccessMsg('Candidate profile updated successfully!');
       if (onProfileUpdated) onProfileUpdated(res.data);
-      setTimeout(() => setSuccessMsg(null), 3500);
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = setTimeout(() => {
+        onClose();
+      }, 700);
     } catch (err) {
       setError(err.message || 'Failed to save profile changes');
     } finally {
@@ -612,7 +629,7 @@ export default function CandidateProfileModal({ isOpen, onClose, onProfileUpdate
 
                   <div>
                     <label className="block text-xs font-bold text-slate-800 mb-1">
-                      Skills & Technologies
+                      Skills & Technologies <span className="text-rose-500">*</span>
                     </label>
                     <div className="flex gap-2 mb-2">
                       <input
@@ -1071,10 +1088,15 @@ export default function CandidateProfileModal({ isOpen, onClose, onProfileUpdate
               <button
                 type="button"
                 onClick={handleSaveProfile}
-                disabled={saving || loading}
+                disabled={saving || loading || uploading}
                 className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {saving ? (
+                {uploading ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Uploading Resume...</span>
+                  </>
+                ) : saving ? (
                   <>
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
                     <span>Saving Profile...</span>

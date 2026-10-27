@@ -53,10 +53,13 @@ async function runNotificationTests() {
   let applicationId = null;
   let employerNotificationId = null;
   let seekerNotificationId = null;
+  let testMongod = null;
 
   try {
-    if (mongoose.connection.readyState === 0 && process.env.MONGO_URI) {
-      await mongoose.connect(process.env.MONGO_URI);
+    if (mongoose.connection.readyState === 0) {
+      const { MongoMemoryServer } = await import('mongodb-memory-server');
+      testMongod = await MongoMemoryServer.create();
+      await mongoose.connect(testMongod.getUri());
     }
 
     // 0. Setup accounts & initial job
@@ -303,7 +306,12 @@ async function runNotificationTests() {
     console.log('🎉 All 13 Notification & Email Alert tests passed with flying colors!');
     console.log('════════════════════════════════════════════════════════════\n');
   } finally {
-    if (mongoose.connection.readyState !== 0 && !testEnv.isEphemeral) {
+    if (testMongod) {
+      if (mongoose.connection.readyState !== 0) {
+        await mongoose.disconnect();
+      }
+      await testMongod.stop();
+    } else if (mongoose.connection.readyState !== 0 && !testEnv.isEphemeral) {
       await mongoose.disconnect();
     }
     await testEnv.teardown();
