@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import { setupTestEnvironment } from './testHarness.js';
 import User from '../src/models/User.js';
 import Job from '../src/models/Job.js';
+import app from '../src/app.js';
 
 let BASE_URL = process.env.API_URL || 'http://localhost:5001';
 
@@ -49,10 +50,17 @@ async function runAdminTests() {
   let employerId = null;
   let pendingJobId = null;
   let approvedJobId = null;
+  let testMongod = null;
+  let localServer = null;
 
   try {
-    if (mongoose.connection.readyState === 0 && process.env.MONGO_URI) {
-      await mongoose.connect(process.env.MONGO_URI);
+    if (mongoose.connection.readyState === 0) {
+      const { MongoMemoryServer } = await import('mongodb-memory-server');
+      testMongod = await MongoMemoryServer.create();
+      await mongoose.connect(testMongod.getUri());
+      localServer = app.listen(0);
+      await new Promise((resolve) => localServer.once('listening', resolve));
+      BASE_URL = `http://localhost:${localServer.address().port}`;
     }
 
     console.log('\n▶ Setup: Provisioning test accounts (Jobseeker, Employer, Admin)...');
@@ -297,7 +305,15 @@ async function runAdminTests() {
     console.log('🎉 All 16 Admin Dashboard & Job Moderation tests passed!');
     console.log('════════════════════════════════════════════════════════════\n');
   } finally {
-    if (mongoose.connection.readyState !== 0 && !testEnv.isEphemeral) {
+    if (localServer) {
+      await new Promise((resolve) => localServer.close(resolve));
+    }
+    if (testMongod) {
+      if (mongoose.connection.readyState !== 0) {
+        await mongoose.disconnect();
+      }
+      await testMongod.stop();
+    } else if (mongoose.connection.readyState !== 0 && !testEnv.isEphemeral) {
       await mongoose.disconnect();
     }
     await testEnv.teardown();
