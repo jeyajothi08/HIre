@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 
 export const EMPLOYMENT_TYPES = ['Full-time', 'Part-time', 'Contract', 'Internship'];
 export const WORKPLACE_TYPES = ['Remote', 'Hybrid', 'On-site'];
+export const JOB_STATUSES = ['pending', 'approved', 'rejected'];
 
 const jobSchema = new mongoose.Schema(
   {
@@ -85,6 +86,34 @@ const jobSchema = new mongoose.Schema(
       ref: 'User',
       required: false,
       index: true,
+    },
+    status: {
+      type: String,
+      enum: {
+        values: ['pending', 'approved', 'rejected'],
+        message: '{VALUE} is not a valid moderation status. Allowed: pending, approved, rejected',
+      },
+      default: () => (process.env.JOB_MODERATION_ENABLED === 'true' ? 'pending' : 'approved'),
+      index: true,
+    },
+    isActive: {
+      type: Boolean,
+      default: true,
+      index: true,
+    },
+    rejectionReason: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    moderatedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
+    moderatedAt: {
+      type: Date,
+      default: null,
     },
   },
   {

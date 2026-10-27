@@ -38,10 +38,12 @@ export default function EmployerApplicantsModal({ isOpen, onClose }) {
   const [downloadingResumeId, setDownloadingResumeId] = useState(null);
   const [candidateProfileModal, setCandidateProfileModal] = useState(null);
   const [loadingProfileId, setLoadingProfileId] = useState(null);
+  const [resumeActionError, setResumeActionError] = useState(null);
 
   const fetchApplicants = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setResumeActionError(null);
     try {
       const res = await getEmployerApplications();
       setApplications(res.data || []);
@@ -99,7 +101,10 @@ export default function EmployerApplicantsModal({ isOpen, onClose }) {
         prev.map((app) => (app._id === appId ? { ...app, status: newStatus } : app))
       );
     } catch (err) {
-      alert(err.message || 'Failed to update candidate status');
+      setResumeActionError({
+        appId,
+        message: err.message || 'Failed to update candidate status',
+      });
     } finally {
       setUpdatingId(null);
     }
@@ -107,11 +112,15 @@ export default function EmployerApplicantsModal({ isOpen, onClose }) {
 
   // Download candidate resume securely
   const handleDownloadResume = async (appId, applicantName) => {
+    setResumeActionError(null);
     setDownloadingResumeId(appId);
     try {
       await downloadApplicationResume(appId, applicantName);
     } catch (err) {
-      alert(err.message || 'Failed to download candidate resume');
+      setResumeActionError({
+        appId,
+        message: err.message || 'The applicant has not uploaded a resume.',
+      });
     } finally {
       setDownloadingResumeId(null);
     }
@@ -119,6 +128,7 @@ export default function EmployerApplicantsModal({ isOpen, onClose }) {
 
   // View candidate profile details
   const handleViewProfile = async (appId, applicantName) => {
+    setResumeActionError(null);
     setLoadingProfileId(appId);
     try {
       const res = await getApplicationCandidateProfile(appId);
@@ -127,7 +137,10 @@ export default function EmployerApplicantsModal({ isOpen, onClose }) {
         profile: res.data || {},
       });
     } catch (err) {
-      alert(err.message || 'Unable to fetch candidate profile');
+      setResumeActionError({
+        appId,
+        message: err.message || 'Unable to fetch candidate profile',
+      });
     } finally {
       setLoadingProfileId(null);
     }
@@ -335,36 +348,67 @@ export default function EmployerApplicantsModal({ isOpen, onClose }) {
                     )}
 
                     {/* Candidate Actions: Profile & Resume */}
-                    <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleViewProfile(app._id, applicant.name || 'Candidate')}
-                          disabled={loadingProfileId === app._id}
-                          className="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-colors disabled:opacity-60"
-                        >
-                          {loadingProfileId === app._id ? (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" />
-                          ) : (
-                            <User className="w-3.5 h-3.5 text-blue-600" />
-                          )}
-                          <span>View Candidate Profile</span>
-                        </button>
+                    <div className="pt-2 border-t border-slate-100 flex flex-col gap-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleViewProfile(app._id, applicant.name || 'Candidate')}
+                            disabled={loadingProfileId === app._id}
+                            className="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-colors disabled:opacity-60"
+                          >
+                            {loadingProfileId === app._id ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" />
+                            ) : (
+                              <User className="w-3.5 h-3.5 text-blue-600" />
+                            )}
+                            <span>View Candidate Profile</span>
+                          </button>
 
-                        <button
-                          type="button"
-                          onClick={() => handleDownloadResume(app._id, applicant.name || 'Candidate')}
-                          disabled={downloadingResumeId === app._id}
-                          className="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm disabled:opacity-60"
-                        >
-                          {downloadingResumeId === app._id ? (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          {app.hasResume === false ? (
+                            <button
+                              type="button"
+                              disabled
+                              className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-400 text-xs font-medium flex items-center gap-1.5 border border-slate-200 cursor-not-allowed"
+                              title="The applicant has not uploaded a resume for this profile"
+                            >
+                              <FileText className="w-3.5 h-3.5 text-slate-400" />
+                              <span>No Resume Uploaded</span>
+                            </button>
                           ) : (
-                            <Download className="w-3.5 h-3.5 text-blue-400" />
+                            <button
+                              type="button"
+                              onClick={() => handleDownloadResume(app._id, applicant.name || 'Candidate')}
+                              disabled={downloadingResumeId === app._id}
+                              className="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm disabled:opacity-60"
+                            >
+                              {downloadingResumeId === app._id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Download className="w-3.5 h-3.5 text-blue-400" />
+                              )}
+                              <span>Download Resume (PDF)</span>
+                            </button>
                           )}
-                          <span>Download Resume (PDF)</span>
-                        </button>
+                        </div>
                       </div>
+
+                      {resumeActionError && resumeActionError.appId === app._id && (
+                        <div className="w-full p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-center justify-between gap-2 animate-in fade-in duration-150">
+                          <div className="flex items-center gap-2">
+                            <AlertCircle className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
+                            <span>{resumeActionError.message}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setResumeActionError(null)}
+                            className="text-amber-500 hover:text-amber-800 p-0.5 rounded transition-colors"
+                            aria-label="Dismiss message"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 );

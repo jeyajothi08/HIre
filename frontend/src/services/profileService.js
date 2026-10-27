@@ -103,8 +103,12 @@ export async function downloadMyResume(filename = 'resume.pdf') {
   a.download = filename;
   document.body.appendChild(a);
   a.click();
-  window.URL.revokeObjectURL(url);
-  document.body.removeChild(a);
+  setTimeout(() => {
+    window.URL.revokeObjectURL(url);
+    if (a.parentNode) {
+      document.body.removeChild(a);
+    }
+  }, 1000);
 }
 
 /**
@@ -163,6 +167,10 @@ export async function downloadApplicationResume(applicationId, candidateName = '
   a.download = `${sanitizedName}_resume.pdf`;
   document.body.appendChild(a);
   a.click();
-  window.URL.revokeObjectURL(url);
-  document.body.removeChild(a);
+  setTimeout(() => {
+    window.URL.revokeObjectURL(url);
+    if (a.parentNode) {
+      document.body.removeChild(a);
+    }
+  }, 1000);
 }

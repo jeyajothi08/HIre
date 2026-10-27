@@ -31,6 +31,8 @@ import CreateJobModal from './components/CreateJobModal';
 import MyApplicationsModal from './components/MyApplicationsModal';
 import EmployerApplicantsModal from './components/EmployerApplicantsModal';
 import CandidateProfileModal from './components/CandidateProfileModal';
+import NotificationCenter from './components/NotificationCenter';
+import AdminDashboardModal from './components/AdminDashboardModal';
 
 const WORKPLACE_TABS = ['All', 'Remote', 'Hybrid', 'On-site'];
 const TRENDING_TAGS = ['Remote', 'React', 'Node.js', 'TypeScript', 'MongoDB', 'Design Systems'];
@@ -74,6 +76,7 @@ export default function App() {
   const [myApplicationsModalOpen, setMyApplicationsModalOpen] = useState(false);
   const [employerApplicantsModalOpen, setEmployerApplicantsModalOpen] = useState(false);
   const [candidateProfileModalOpen, setCandidateProfileModalOpen] = useState(false);
+  const [adminDashboardModalOpen, setAdminDashboardModalOpen] = useState(false);
   const [appliedJobIds, setAppliedJobIds] = useState(new Set());
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
@@ -334,6 +337,18 @@ export default function App() {
                   </button>
                 )}
 
+                {/* Admin Action: Admin Dashboard & Job Moderation */}
+                {user.role === 'admin' && (
+                  <button 
+                    type="button" 
+                    onClick={() => setAdminDashboardModalOpen(true)}
+                    className="text-xs font-semibold border border-purple-300 hover:border-purple-400 text-purple-900 bg-purple-50 hover:bg-purple-100/80 px-3 py-2 rounded-lg transition-all flex items-center gap-1.5 shadow-sm"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5 text-purple-600" />
+                    <span>Admin Dashboard</span>
+                  </button>
+                )}
+
                 {/* Post a Job button (Active for employer) */}
                 <button 
                   type="button" 
@@ -343,6 +358,14 @@ export default function App() {
                   <Plus className="w-3.5 h-3.5 text-blue-400" />
                   <span>Post a Job</span>
                 </button>
+
+                {/* Live Notification Center */}
+                <NotificationCenter
+                  user={user}
+                  onSelectJob={openJobModal}
+                  onOpenMyApplications={() => setMyApplicationsModalOpen(true)}
+                  onOpenEmployerApplicants={() => setEmployerApplicantsModalOpen(true)}
+                />
 
                 {/* User Dropdown Menu */}
                 <div className="relative">
@@ -408,6 +431,20 @@ export default function App() {
                         </button>
                       )}
 
+                      {user.role === 'admin' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setUserMenuOpen(false);
+                            setAdminDashboardModalOpen(true);
+                          }}
+                          className="w-full px-3 py-2 text-left text-xs text-purple-700 hover:bg-purple-50 flex items-center gap-2 transition-colors font-medium"
+                        >
+                          <ShieldCheck className="w-3.5 h-3.5 text-purple-600" />
+                          <span>Admin Dashboard</span>
+                        </button>
+                      )}
+
                       <button
                         type="button"
                         onClick={handleSignOut}
@@ -449,8 +486,16 @@ export default function App() {
             )}
           </div>
 
-          {/* Mobile Menu Button */}
-          <div className="flex md:hidden">
+          {/* Mobile Actions: Notifications & Menu Button */}
+          <div className="flex md:hidden items-center gap-2">
+            {user && (
+              <NotificationCenter
+                user={user}
+                onSelectJob={openJobModal}
+                onOpenMyApplications={() => setMyApplicationsModalOpen(true)}
+                onOpenEmployerApplicants={() => setEmployerApplicantsModalOpen(true)}
+              />
+            )}
             <button 
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="p-2 text-slate-600 hover:text-slate-900"
@@ -521,6 +566,19 @@ export default function App() {
                     >
                       <Users className="w-4 h-4 text-blue-600" />
                       <span>Review Applicants</span>
+                    </button>
+                  )}
+
+                  {user.role === 'admin' && (
+                    <button 
+                      onClick={() => {
+                        setMobileMenuOpen(false);
+                        setAdminDashboardModalOpen(true);
+                      }}
+                      className="w-full text-center py-2 text-sm font-medium border border-purple-200 bg-purple-50 text-purple-800 rounded-lg flex items-center justify-center gap-2"
+                    >
+                      <ShieldCheck className="w-4 h-4 text-purple-600" />
+                      <span>Admin Dashboard</span>
                     </button>
                   )}
 
@@ -1047,6 +1105,9 @@ export default function App() {
         initialRole={authModalRole}
         onSuccess={(authenticatedUser) => {
           setUser(authenticatedUser);
+          if (authenticatedUser?.role === 'admin') {
+            setAdminDashboardModalOpen(true);
+          }
           if (authenticatedUser?.role !== 'jobseeker') {
             setAppliedJobIds(new Set());
           }
@@ -1083,6 +1144,18 @@ export default function App() {
         isOpen={candidateProfileModalOpen}
         onClose={() => setCandidateProfileModalOpen(false)}
       />
+
+      {/* Admin Dashboard & Moderation Modal */}
+      {user?.role === 'admin' && (
+        <AdminDashboardModal
+          key={adminDashboardModalOpen ? 'admin-dashboard-open' : 'admin-dashboard-closed'}
+          isOpen={adminDashboardModalOpen}
+          onClose={() => {
+            setAdminDashboardModalOpen(false);
+            setRetryCount((prev) => prev + 1);
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -275,10 +275,11 @@ export const downloadMyResume = async (req, res, next) => {
 
     const { stream, sizeBytes } = await storageService.getFile(profile.resume.storageKey);
 
-    const safeFilename = encodeURIComponent(profile.resume.originalName || 'resume.pdf');
+    const rawFilename = (profile.resume.originalName || 'resume.pdf').replace(/[^a-zA-Z0-9._-]/g, '_');
+    const safeFilename = encodeURIComponent(rawFilename);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Length', sizeBytes);
-    res.setHeader('Content-Disposition', `inline; filename="${safeFilename}"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${rawFilename}"; filename*=UTF-8''${safeFilename}`);
     res.setHeader('X-Content-Type-Options', 'nosniff');
 
     stream.pipe(res);
@@ -441,10 +442,11 @@ export const getApplicationCandidateResume = async (req, res, next) => {
 
     const { stream, sizeBytes } = await storageService.getFile(profile.resume.storageKey);
 
-    const safeFilename = encodeURIComponent(profile.resume.originalName || 'applicant-resume.pdf');
+    const rawFilename = (profile.resume.originalName || 'applicant-resume.pdf').replace(/[^a-zA-Z0-9._-]/g, '_');
+    const safeFilename = encodeURIComponent(rawFilename);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Length', sizeBytes);
-    res.setHeader('Content-Disposition', `inline; filename="${safeFilename}"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${rawFilename}"; filename*=UTF-8''${safeFilename}`);
     res.setHeader('X-Content-Type-Options', 'nosniff');
 
     stream.pipe(res);

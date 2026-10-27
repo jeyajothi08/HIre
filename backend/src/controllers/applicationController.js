@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import Application, { APPLICATION_STATUSES } from '../models/Application.js';
 import Job from '../models/Job.js';
 import User from '../models/User.js';
+import Profile from '../models/Profile.js';
 import { createNotification } from '../services/notificationService.js';
 import { getDBStatus } from '../config/db.js';
 
@@ -214,19 +215,49 @@ export const getJobApplications = async (req, res, next) => {
       .sort({ createdAt: -1 })
       .lean();
 
+    const enrichedApplications = await attachResumeMetadata(applications);
+
     res.status(200).json({
       success: true,
-      count: applications.length,
+      count: enrichedApplications.length,
       job: {
         id: job._id,
         title: job.title,
         company: job.company,
       },
-      data: applications,
+      data: enrichedApplications,
     });
   } catch (error) {
     next(error);
   }
+};
+
+/**
+ * Safely attach resume presence flags from candidate profile without altering ownership or authorization.
+ */
+const attachResumeMetadata = async (applications) => {
+  if (!Array.isArray(applications) || applications.length === 0) return applications;
+
+  const applicantIds = applications
+    .map((app) => app.applicant?._id)
+    .filter((id) => id && mongoose.Types.ObjectId.isValid(id));
+
+  if (applicantIds.length === 0) return applications;
+
+  const profiles = await Profile.find({ user: { $in: applicantIds } })
+    .select('user resume.storageKey resume.originalName')
+    .lean();
+  const profileMap = new Map(profiles.map((p) => [p.user.toString(), p]));
+
+  return applications.map((app) => {
+    const prof = app.applicant?._id ? profileMap.get(app.applicant._id.toString()) : null;
+    const hasResume = Boolean(prof?.resume?.storageKey);
+    return {
+      ...app,
+      hasResume,
+      resumeOriginalName: hasResume ? (prof.resume.originalName || 'resume.pdf') : null,
+    };
+  });
 };
 
 /**
@@ -256,10 +287,12 @@ export const getEmployerApplications = async (req, res, next) => {
       .sort({ createdAt: -1 })
       .lean();
 
+    const enrichedApplications = await attachResumeMetadata(applications);
+
     res.status(200).json({
       success: true,
-      count: applications.length,
-      data: applications,
+      count: enrichedApplications.length,
+      data: enrichedApplications,
     });
   } catch (error) {
     next(error);

@@ -36,6 +36,7 @@ export default function AuthModal({
   const [successMessage, setSuccessMessage] = useState(null);
 
   const handleClose = useCallback(() => {
+    setPassword('');
     setError(null);
     setSuccessMessage(null);
     onClose();
@@ -109,6 +110,7 @@ export default function AuthModal({
 
   const switchTab = (tab) => {
     setActiveTab(tab);
+    setPassword('');
     setError(null);
     setSuccessMessage(null);
   };
@@ -244,6 +246,8 @@ export default function AuthModal({
                     </div>
                     <input
                       type="text"
+                      name="name"
+                      autoComplete="name"
                       required
                       value={name}
                       onChange={(e) => setName(e.target.value)}
@@ -266,6 +270,8 @@ export default function AuthModal({
                 </div>
                 <input
                   type="email"
+                  name="email"
+                  autoComplete="username email"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -286,6 +292,8 @@ export default function AuthModal({
                 </div>
                 <input
                   type={showPassword ? 'text' : 'password'}
+                  name="password"
+                  autoComplete={activeTab === 'login' ? 'current-password' : 'new-password'}
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}

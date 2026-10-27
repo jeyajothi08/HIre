@@ -51,7 +51,10 @@ export const getJobs = async (req, res, next) => {
       limit = 10,
     } = req.query;
 
-    const filter = {};
+    const filter = {
+      status: { $nin: ['pending', 'rejected'] },
+      isActive: { $ne: false },
+    };
 
     // Keyword search (searches title, company, description, or skills)
     const searchTerm = (search || q || '').trim();
@@ -242,6 +245,8 @@ export const createJob = async (req, res, next) => {
       salaryMin: salaryMin != null && !isNaN(Number(salaryMin)) ? Number(salaryMin) : null,
       salaryMax: salaryMax != null && !isNaN(Number(salaryMax)) ? Number(salaryMax) : null,
       createdBy: req.user ? req.user._id : null,
+      status: (process.env.JOB_MODERATION_ENABLED === 'true' && req.user?.role !== 'admin') ? 'pending' : 'approved',
+      isActive: true,
     });
 
     res.status(201).json({

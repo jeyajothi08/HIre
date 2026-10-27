@@ -11,6 +11,7 @@
     "start": "npm run start --prefix backend",
     "lint": "npm run lint --prefix frontend",
     "test": "npm run test --prefix backend",
-    "test:backend": "npm run test --prefix backend"
+    "test:backend": "npm run test --prefix backend",
+    "seed:admin": "npm run seed:admin --prefix backend"
   }
 }

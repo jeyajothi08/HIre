@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import mongoose from 'mongoose';
 import { setupTestEnvironment } from './testHarness.js';
 import { createNotification } from '../src/services/notificationService.js';
 import { sendEmailAlert, isEmailConfigured } from '../src/services/emailService.js';
@@ -54,6 +55,10 @@ async function runNotificationTests() {
   let seekerNotificationId = null;
 
   try {
+    if (mongoose.connection.readyState === 0 && process.env.MONGO_URI) {
+      await mongoose.connect(process.env.MONGO_URI);
+    }
+
     // 0. Setup accounts & initial job
     console.log('\n▶ Setup: Registering test users (Jobseekers A & B, Employers A & B)...');
 
@@ -62,7 +67,7 @@ async function runNotificationTests() {
       method: 'POST',
       body: { name: 'Seeker Notif A', email: seekerAEmail, password, role: 'jobseeker' },
     });
-    seekerAToken = regSeekerA.headers.get('set-cookie');
+    seekerAToken = regSeekerA.body.token;
     assert.equal(regSeekerA.status, 201);
 
     // Register Seeker B
@@ -70,7 +75,7 @@ async function runNotificationTests() {
       method: 'POST',
       body: { name: 'Seeker Notif B', email: seekerBEmail, password, role: 'jobseeker' },
     });
-    seekerBToken = regSeekerB.headers.get('set-cookie');
+    seekerBToken = regSeekerB.body.token;
     assert.equal(regSeekerB.status, 201);
 
     // Register Employer A
@@ -78,8 +83,8 @@ async function runNotificationTests() {
       method: 'POST',
       body: { name: 'Employer Notif A', email: employerAEmail, password, role: 'employer' },
     });
-    employerAToken = regEmpA.headers.get('set-cookie');
-    employerAId = regEmpA.body.data.user.id || regEmpA.body.data.user._id;
+    employerAToken = regEmpA.body.token;
+    employerAId = regEmpA.body.data.id || regEmpA.body.data._id;
     assert.equal(regEmpA.status, 201);
 
     // Register Employer B
@@ -87,13 +92,13 @@ async function runNotificationTests() {
       method: 'POST',
       body: { name: 'Employer Notif B', email: employerBEmail, password, role: 'employer' },
     });
-    employerBToken = regEmpB.headers.get('set-cookie');
+    employerBToken = regEmpB.body.token;
     assert.equal(regEmpB.status, 201);
 
     // Employer A creates a job posting
     const jobRes = await request('/api/v1/jobs', {
       method: 'POST',
-      headers: { Cookie: employerAToken },
+      headers: { Authorization: `Bearer ${employerAToken}` },
       body: {
         title: 'Senior Systems Architect',
         company: 'Cloud Scale Inc',
@@ -118,7 +123,7 @@ async function runNotificationTests() {
     // --- TEST 2: Initial notifications list empty ---
     console.log('\n▶ Test 2: GET /api/v1/notifications (Initial empty state)');
     const emptyRes = await request('/api/v1/notifications', {
-      headers: { Cookie: employerAToken },
+      headers: { Authorization: `Bearer ${employerAToken}` },
     });
     assert.equal(emptyRes.status, 200);
     assert.equal(emptyRes.body.count, 0);
@@ -128,7 +133,7 @@ async function runNotificationTests() {
     // --- TEST 3: Initial unread count is 0 ---
     console.log('\n▶ Test 3: GET /api/v1/notifications/unread-count');
     const unreadRes = await request('/api/v1/notifications/unread-count', {
-      headers: { Cookie: employerAToken },
+      headers: { Authorization: `Bearer ${employerAToken}` },
     });
     assert.equal(unreadRes.status, 200);
     assert.equal(unreadRes.body.count, 0);
@@ -138,7 +143,7 @@ async function runNotificationTests() {
     console.log('\n▶ Test 4: POST /api/v1/applications -> Employer receives new_application notification');
     const applyRes = await request('/api/v1/applications', {
       method: 'POST',
-      headers: { Cookie: seekerAToken },
+      headers: { Authorization: `Bearer ${seekerAToken}` },
       body: {
         jobId: employerAJobId,
         coverLetter: 'I am excited to apply for the Senior Systems Architect position.',
@@ -148,11 +153,11 @@ async function runNotificationTests() {
     applicationId = applyRes.body.data._id;
 
     // Small delay to allow background notification creation to settle
-    await new Promise((r) => setTimeout(r, 200));
+    await new Promise((r) => setTimeout(r, 400));
 
     // Employer A checks unread count
     const empUnreadRes = await request('/api/v1/notifications/unread-count', {
-      headers: { Cookie: employerAToken },
+      headers: { Authorization: `Bearer ${employerAToken}` },
     });
     assert.equal(empUnreadRes.status, 200);
     assert.equal(empUnreadRes.body.count, 1);
@@ -161,7 +166,7 @@ async function runNotificationTests() {
     // --- TEST 5: Employer fetches notifications list ---
     console.log('\n▶ Test 5: GET /api/v1/notifications (Employer inspects notification)');
     const empNotifList = await request('/api/v1/notifications', {
-      headers: { Cookie: employerAToken },
+      headers: { Authorization: `Bearer ${employerAToken}` },
     });
     assert.equal(empNotifList.status, 200);
     assert.equal(empNotifList.body.count, 1);
@@ -176,12 +181,12 @@ async function runNotificationTests() {
     // --- TEST 6: Strict Cross-User Notification Isolation ---
     console.log('\n▶ Test 6: Cross-user isolation check (Seeker B & Employer B see 0 notifications)');
     const seekerBNotifs = await request('/api/v1/notifications', {
-      headers: { Cookie: seekerBToken },
+      headers: { Authorization: `Bearer ${seekerBToken}` },
     });
     assert.equal(seekerBNotifs.body.count, 0);
 
     const empBNotifs = await request('/api/v1/notifications', {
-      headers: { Cookie: employerBToken },
+      headers: { Authorization: `Bearer ${employerBToken}` },
     });
     assert.equal(empBNotifs.body.count, 0);
     console.log('  ✅ Unrelated users isolated: 0 notifications visible');
@@ -190,16 +195,16 @@ async function runNotificationTests() {
     console.log('\n▶ Test 7: PATCH /api/v1/applications/:id/status -> Jobseeker receives status_update notification');
     const updateStatusRes = await request(`/api/v1/applications/${applicationId}/status`, {
       method: 'PATCH',
-      headers: { Cookie: employerAToken },
+      headers: { Authorization: `Bearer ${employerAToken}` },
       body: { status: 'Shortlisted' },
     });
     assert.equal(updateStatusRes.status, 200);
 
-    await new Promise((r) => setTimeout(r, 200));
+    await new Promise((r) => setTimeout(r, 400));
 
     // Seeker A checks unread count & notifications
     const seekerNotifRes = await request('/api/v1/notifications', {
-      headers: { Cookie: seekerAToken },
+      headers: { Authorization: `Bearer ${seekerAToken}` },
     });
     assert.equal(seekerNotifRes.status, 200);
     assert.equal(seekerNotifRes.body.count, 1);
@@ -214,7 +219,7 @@ async function runNotificationTests() {
     console.log('\n▶ Test 8: PATCH /api/v1/notifications/:id/read (Cross-user unauthorized update)');
     const unauthMark = await request(`/api/v1/notifications/${seekerNotificationId}/read`, {
       method: 'PATCH',
-      headers: { Cookie: employerBToken },
+      headers: { Authorization: `Bearer ${employerBToken}` },
     });
     assert.equal(unauthMark.status, 403);
     console.log('  ✅ Cross-user notification modification blocked with 403 Forbidden');
@@ -223,7 +228,7 @@ async function runNotificationTests() {
     console.log('\n▶ Test 9: PATCH /api/v1/notifications/:id/read (Invalid ObjectId)');
     const invalidIdRes = await request('/api/v1/notifications/not-an-id/read', {
       method: 'PATCH',
-      headers: { Cookie: seekerAToken },
+      headers: { Authorization: `Bearer ${seekerAToken}` },
     });
     assert.equal(invalidIdRes.status, 400);
     console.log('  ✅ Malformed notification ID rejected with 400 Bad Request');
@@ -232,13 +237,13 @@ async function runNotificationTests() {
     console.log('\n▶ Test 10: PATCH /api/v1/notifications/:id/read (Authorized owner mark read)');
     const markReadRes = await request(`/api/v1/notifications/${seekerNotificationId}/read`, {
       method: 'PATCH',
-      headers: { Cookie: seekerAToken },
+      headers: { Authorization: `Bearer ${seekerAToken}` },
     });
     assert.equal(markReadRes.status, 200);
     assert.equal(markReadRes.body.data.read, true);
 
     const seekerUnreadAfter = await request('/api/v1/notifications/unread-count', {
-      headers: { Cookie: seekerAToken },
+      headers: { Authorization: `Bearer ${seekerAToken}` },
     });
     assert.equal(seekerUnreadAfter.body.count, 0);
     console.log('  ✅ Notification marked read and unread count reduced to 0');
@@ -268,13 +273,13 @@ async function runNotificationTests() {
     console.log('\n▶ Test 12: PATCH /api/v1/notifications/read-all (Mark all as read)');
     const markAllRes = await request('/api/v1/notifications/read-all', {
       method: 'PATCH',
-      headers: { Cookie: employerAToken },
+      headers: { Authorization: `Bearer ${employerAToken}` },
     });
     assert.equal(markAllRes.status, 200);
     assert.ok(markAllRes.body.modifiedCount >= 1);
 
     const empUnreadFinal = await request('/api/v1/notifications/unread-count', {
-      headers: { Cookie: employerAToken },
+      headers: { Authorization: `Bearer ${employerAToken}` },
     });
     assert.equal(empUnreadFinal.body.count, 0);
     console.log('  ✅ Mark-all-read cleared all unread notifications');
@@ -298,7 +303,10 @@ async function runNotificationTests() {
     console.log('🎉 All 13 Notification & Email Alert tests passed with flying colors!');
     console.log('════════════════════════════════════════════════════════════\n');
   } finally {
-    await testEnv.cleanup();
+    if (mongoose.connection.readyState !== 0 && !testEnv.isEphemeral) {
+      await mongoose.disconnect();
+    }
+    await testEnv.teardown();
   }
 }
 
