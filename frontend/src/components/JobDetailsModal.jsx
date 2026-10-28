@@ -140,7 +140,7 @@ export default function JobDetailsModal({
         <div className="flex items-center justify-between p-5 border-b border-slate-100 bg-slate-50/50">
           <div className="flex items-center space-x-2 text-xs font-medium text-slate-500">
             <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-            <span>Verified Hiring Partner</span>
+            <span>Hiring Partner</span>
           </div>
 
           <div className="flex items-center space-x-1.5">
@@ -355,13 +355,13 @@ export default function JobDetailsModal({
                 </div>
               )}
 
-              {/* SLA Guarantee Box */}
+              {/* Application Information Box */}
               <div className="p-4 rounded-xl bg-blue-50/60 border border-blue-100 text-xs text-blue-900 flex items-start space-x-3">
                 <Building2 className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
                 <div>
-                  <span className="font-semibold block">HireHub Response Guarantee</span>
+                  <span className="font-semibold block">Application Information</span>
                   <span className="text-blue-700/90 mt-0.5 block leading-relaxed">
-                    This employer has committed to a verified review timeline. You will hear back directly from the hiring manager within 7 business days.
+                    Response times may vary by employer.
                   </span>
                 </div>
               </div>
