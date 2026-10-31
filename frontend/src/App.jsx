@@ -39,7 +39,7 @@ const TRENDING_TAGS = ['Remote', 'React', 'Node.js', 'TypeScript', 'MongoDB', 'D
 
 // Safely derive API health check URL from environment or local development default
 const getApiHealthUrl = () => {
-  const base = import.meta.env.VITE_API_URL || 'http://localhost:5001/api/v1';
+  const base = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:5001/api/v1' : '/api/v1');
   const cleanBase = base.replace(/\/+$/, '');
   if (cleanBase.endsWith('/api/v1')) {
     return `${cleanBase}/health`;
