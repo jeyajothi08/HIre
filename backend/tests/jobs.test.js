@@ -32,7 +32,10 @@ async function runTests() {
     assert.equal(health.status, 200, 'Health endpoint should return 200');
     assert.equal(health.body.success, true);
     assert.equal(health.body.database.status, 'connected', 'Database must be connected');
-    console.log('  ✅ Health check passed. DB status:', health.body.database.status);
+    assert.equal(health.body.database.isInMemory, true, 'Test harness must run on in-memory database');
+    assert.equal(health.body.database.isPersistent, false, 'Test harness must not run on persistent database');
+    assert.equal(health.body.status, 'degraded', 'In-memory database must report degraded status, never production-healthy');
+    console.log('  ✅ Health check passed. DB status:', health.body.database.status, `(type: ${health.body.database.databaseType})`);
 
     // 2. Root API welcome check
     console.log('\n▶ Test 2: GET /');

@@ -20,7 +20,7 @@ if (!fs.existsSync(PRIVATE_STORAGE_DIR)) {
  */
 class StorageService {
   constructor() {
-    this.provider = process.env.STORAGE_PROVIDER || 'local';
+    this.provider = (process.env.STORAGE_PROVIDER || process.env.STORAGE_DRIVER || 'local').toLowerCase();
     this.storageDir = PRIVATE_STORAGE_DIR;
   }
 
@@ -55,7 +55,8 @@ class StorageService {
   async uploadFile(buffer, originalName, mimeType = 'application/pdf') {
     const storageKey = this.generateKey(originalName);
 
-    if (this.provider === 's3' && process.env.S3_BUCKET && process.env.AWS_ACCESS_KEY_ID) {
+    const s3Bucket = process.env.S3_BUCKET || process.env.AWS_S3_BUCKET;
+    if (this.provider === 's3' && s3Bucket && process.env.AWS_ACCESS_KEY_ID) {
       // Pluggable cloud object storage implementation
       // Uses AWS SDK client when configured in production
       throw new Error('S3 storage provider is configured in env but AWS credentials need verification.');
