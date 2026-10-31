@@ -322,8 +322,47 @@ async function runAuthTests() {
       process.env.JWT_SECRET = originalSecret;
     }
 
+    // 21. Production cookie options validation (Unified Same-Origin Architecture)
+    console.log('\n▶ Test 21: Production cookie options (httpOnly, secure, sameSite=lax, path=/)');
+    const { getAuthCookieOptions } = await import('../src/controllers/authController.js');
+    const prevEnv = process.env.NODE_ENV;
+    try {
+      process.env.NODE_ENV = 'production';
+      const prodOpts = getAuthCookieOptions();
+      assert.equal(prodOpts.httpOnly, true, 'Production cookie must have httpOnly: true');
+      assert.equal(prodOpts.secure, true, 'Production cookie must have secure: true');
+      assert.equal(prodOpts.sameSite, 'lax', 'Production cookie must have sameSite: "lax" in unified same-origin architecture');
+      assert.equal(prodOpts.path, '/', 'Production cookie must have path: "/"');
+      assert.equal(prodOpts.domain, undefined, 'Production cookie domain must NOT be set to .onrender.com');
+      console.log('  ✅ Production cookie options validated (httpOnly: true, secure: true, sameSite: "lax", path: "/", domain: undefined)');
+
+      // 22. Development cookie options validation
+      console.log('\n▶ Test 22: Development cookie options (httpOnly, secure=false, sameSite=lax, path=/)');
+      process.env.NODE_ENV = 'development';
+      const devOpts = getAuthCookieOptions();
+      assert.equal(devOpts.httpOnly, true, 'Development cookie must have httpOnly: true');
+      assert.equal(devOpts.secure, false, 'Development cookie must have secure: false');
+      assert.equal(devOpts.sameSite, 'lax', 'Development cookie must have sameSite: "lax"');
+      assert.equal(devOpts.path, '/', 'Development cookie must have path: "/"');
+      assert.equal(devOpts.domain, undefined, 'Development cookie domain must be undefined');
+      console.log('  ✅ Development cookie options validated (httpOnly: true, secure: false, sameSite: "lax", path: "/")');
+
+      // 23. Logout cookie matching options validation
+      console.log('\n▶ Test 23: Logout cookie options match login/registration');
+      process.env.NODE_ENV = 'production';
+      const logoutOpts = getAuthCookieOptions(new Date(0));
+      assert.equal(logoutOpts.expires.getTime(), 0, 'Logout cookie must expire in epoch past');
+      assert.equal(logoutOpts.httpOnly, true, 'Logout cookie must have httpOnly: true');
+      assert.equal(logoutOpts.secure, true, 'Logout cookie must have secure: true in production');
+      assert.equal(logoutOpts.sameSite, 'lax', 'Logout cookie must have sameSite: "lax" in production');
+      assert.equal(logoutOpts.path, '/', 'Logout cookie must have path: "/"');
+      console.log('  ✅ Logout cookie options match production configuration');
+    } finally {
+      process.env.NODE_ENV = prevEnv;
+    }
+
     console.log('\n════════════════════════════════════════════════════════');
-    console.log('🎉 All 20 Authentication & Authorization tests passed!');
+    console.log('🎉 All 23 Authentication & Authorization tests passed!');
     console.log('════════════════════════════════════════════════════════\n');
   } catch (err) {
     console.error('\n❌ Auth test suite failed:', err);

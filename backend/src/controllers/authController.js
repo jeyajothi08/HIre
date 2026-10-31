@@ -1,18 +1,30 @@
 import User, { USER_ROLES } from '../models/User.js';
 
 /**
+ * Helper to determine authentication cookie options for unified same-origin architecture.
+ * - httpOnly: true (prevents client-side script access via XSS)
+ * - secure: true in production (strictly requires HTTPS)
+ * - sameSite: 'lax' (robust CSRF defense in same-origin architecture; fully compatible with Safari ITP)
+ * - path: '/' (cookie accessible across the entire origin)
+ * - domain: omitted (binds strictly to current origin)
+ */
+export const getAuthCookieOptions = (expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)) => {
+  const isProduction = process.env.NODE_ENV === 'production';
+  return {
+    expires,
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: 'lax',
+    path: '/',
+  };
+};
+
+/**
  * Helper to generate JWT token, set secure httpOnly cookie, and send JSON response
  */
 const sendTokenResponse = (user, statusCode, res, message = 'Success') => {
   const token = user.generateAuthToken();
-
-  // 7 days cookie expiration
-  const cookieOptions = {
-    expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-    httpOnly: true, // Prevents XSS script access to session cookie
-    secure: process.env.NODE_ENV === 'production', // Use HTTPS in production
-    sameSite: 'lax', // CSRF mitigation
-  };
+  const cookieOptions = getAuthCookieOptions();
 
   res.cookie('token', token, cookieOptions);
 
@@ -139,11 +151,7 @@ export const login = async (req, res, next) => {
  * @access Public
  */
 export const logout = (req, res) => {
-  res.cookie('token', '', {
-    expires: new Date(0),
-    httpOnly: true,
-    sameSite: 'lax',
-  });
+  res.cookie('token', '', getAuthCookieOptions(new Date(0)));
 
   res.status(200).json({
     success: true,
