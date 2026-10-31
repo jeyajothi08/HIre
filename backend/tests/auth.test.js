@@ -295,8 +295,35 @@ async function runAuthTests() {
     assert.equal(logoutRes.body.success, true);
     console.log('  ✅ Logout returned 200 and cleared cookie');
 
+    // 20. Production JWT_SECRET enforcement check
+    console.log('\n▶ Test 20: Production JWT_SECRET enforcement');
+    const originalNodeEnv = process.env.NODE_ENV;
+    const originalSecret = process.env.JWT_SECRET;
+    try {
+      process.env.NODE_ENV = 'production';
+      delete process.env.JWT_SECRET;
+
+      const User = (await import('../src/models/User.js')).default;
+      const testUser = new User({
+        name: 'JWT Prod Test',
+        email: 'jwt_prod_test@hirehub.local',
+        password: 'Password123!',
+        role: 'jobseeker',
+      });
+
+      assert.throws(
+        () => testUser.generateAuthToken(),
+        /JWT_SECRET must be configured in production/i,
+        'generateAuthToken must throw in production when JWT_SECRET is missing'
+      );
+      console.log('  ✅ generateAuthToken fails fast in production when JWT_SECRET is missing');
+    } finally {
+      process.env.NODE_ENV = originalNodeEnv;
+      process.env.JWT_SECRET = originalSecret;
+    }
+
     console.log('\n════════════════════════════════════════════════════════');
-    console.log('🎉 All 19 Authentication & Authorization tests passed!');
+    console.log('🎉 All 20 Authentication & Authorization tests passed!');
     console.log('════════════════════════════════════════════════════════\n');
   } catch (err) {
     console.error('\n❌ Auth test suite failed:', err);

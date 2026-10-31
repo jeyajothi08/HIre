@@ -29,8 +29,17 @@ export const protect = async (req, res, next) => {
   }
 
   try {
-    const secret = process.env.JWT_SECRET || 'fallback_secret_for_dev_mode_only';
-    const decoded = jwt.verify(token, secret);
+    const isProduction = process.env.NODE_ENV === 'production';
+    const secret = process.env.JWT_SECRET;
+
+    if (!secret || !secret.trim()) {
+      if (isProduction) {
+        throw new Error('FATAL: JWT_SECRET must be configured in production environments.');
+      }
+    }
+
+    const effectiveSecret = (secret && secret.trim()) ? secret.trim() : 'fallback_secret_for_dev_mode_only';
+    const decoded = jwt.verify(token, effectiveSecret);
 
     // Verify user still exists in database
     const user = await User.findById(decoded.id);

@@ -37,7 +37,18 @@ import AdminDashboardModal from './components/AdminDashboardModal';
 const WORKPLACE_TABS = ['All', 'Remote', 'Hybrid', 'On-site'];
 const TRENDING_TAGS = ['Remote', 'React', 'Node.js', 'TypeScript', 'MongoDB', 'Design Systems'];
 
+// Safely derive API health check URL from environment or local development default
+const getApiHealthUrl = () => {
+  const base = import.meta.env.VITE_API_URL || 'http://localhost:5001/api/v1';
+  const cleanBase = base.replace(/\/+$/, '');
+  if (cleanBase.endsWith('/api/v1')) {
+    return `${cleanBase}/health`;
+  }
+  return `${cleanBase}/api/v1/health`;
+};
+
 export default function App() {
+  const apiHealthUrl = getApiHealthUrl();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   
   // Search & Filter state
@@ -246,7 +257,7 @@ export default function App() {
     <div className="min-h-screen bg-[#FAFAFA] text-slate-900 font-sans flex flex-col antialiased selection:bg-slate-900 selection:text-white">
       {/* Top Notice Banner */}
       <div className="bg-slate-900 text-slate-300 text-xs py-2 px-4 text-center border-b border-slate-800">
-        <span className="font-medium text-white">HireHub Live API v1.0:</span> Real-time verified engineering roles backed by MongoDB Atlas.
+        <span className="font-medium text-white">HireHub Live API v1.0:</span> Real-time engineering roles backed by MongoDB Atlas.
       </div>
 
       {/* Navigation */}
@@ -266,7 +277,7 @@ export default function App() {
             <nav className="hidden md:flex items-center space-x-6 text-sm font-medium text-slate-600">
               <a href="#jobs" className="text-slate-900 transition-colors">Find Jobs</a>
               <a href="#about" className="hover:text-slate-900 transition-colors">Why HireHub</a>
-              <a href="http://localhost:5001/api/v1/health" target="_blank" rel="noreferrer" className="hover:text-slate-900 transition-colors flex items-center gap-1.5">
+              <a href={apiHealthUrl} target="_blank" rel="noreferrer" className="hover:text-slate-900 transition-colors flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
                 <span>API Status</span>
               </a>
@@ -511,7 +522,7 @@ export default function App() {
           <div className="md:hidden border-b border-slate-200 bg-white px-4 pt-3 pb-6 space-y-3">
             <a href="#jobs" onClick={() => setMobileMenuOpen(false)} className="block text-sm font-medium text-slate-800 py-1.5">Find Jobs</a>
             <a href="#about" onClick={() => setMobileMenuOpen(false)} className="block text-sm font-medium text-slate-800 py-1.5">Why HireHub</a>
-            <a href="http://localhost:5001/api/v1/health" target="_blank" rel="noreferrer" className="block text-sm font-medium text-slate-800 py-1.5">API Status</a>
+            <a href={apiHealthUrl} target="_blank" rel="noreferrer" className="block text-sm font-medium text-slate-800 py-1.5">API Status</a>
             
             <div className="pt-3 border-t border-slate-100 flex flex-col space-y-2">
               {user ? (
@@ -627,7 +638,7 @@ export default function App() {
           <Sparkles className="w-3.5 h-3.5 text-blue-600" />
           <span>Live MongoDB Jobs Feed</span>
           <span className="text-slate-300">•</span>
-          <span className="text-slate-500">100% Verified Tech Roles</span>
+          <span className="text-slate-500">Curated Technical Roles</span>
         </div>
 
         {/* Hero Title */}
@@ -636,7 +647,7 @@ export default function App() {
         </h1>
         
         <p className="mt-5 text-base sm:text-lg text-slate-600 max-w-2xl mx-auto leading-relaxed">
-          Skip generic job aggregators. Explore high-signal roles with direct engineering hiring manager contact, transparent salaries, and verified requirements.
+          Skip generic job aggregators. Explore high-signal roles with direct engineering hiring manager contact, transparent salaries, and detailed requirements.
         </p>
 
         {/* Search & Filter Bar */}
@@ -721,11 +732,11 @@ export default function App() {
           </div>
           <div className="text-left px-4">
             <div className="text-2xl font-bold text-slate-900">100%</div>
-            <div className="text-xs text-slate-500 mt-0.5">Verified Pay Bands</div>
+            <div className="text-xs text-slate-500 mt-0.5">Transparent Pay Bands</div>
           </div>
           <div className="text-left px-4">
-            <div className="text-2xl font-bold text-slate-900">7 Days</div>
-            <div className="text-xs text-slate-500 mt-0.5">Response SLA</div>
+            <div className="text-2xl font-bold text-slate-900">Direct</div>
+            <div className="text-xs text-slate-500 mt-0.5">Employer Contact</div>
           </div>
           <div className="text-left px-4">
             <div className="text-2xl font-bold text-slate-900">&lt;50ms</div>
@@ -744,7 +755,7 @@ export default function App() {
               {loading ? (
                 <span>Loading available opportunities...</span>
               ) : (
-                <span>Showing {jobs.length} of {totalJobs} verified position{totalJobs === 1 ? '' : 's'}</span>
+                <span>Showing {jobs.length} of {totalJobs} open position{totalJobs === 1 ? '' : 's'}</span>
               )}
             </p>
           </div>
@@ -1036,9 +1047,9 @@ export default function App() {
               <div className="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center font-bold mb-4 shadow-sm">
                 3
               </div>
-              <h3 className="text-base font-bold text-slate-900">Guaranteed Response SLA</h3>
+              <h3 className="text-base font-bold text-slate-900">Direct Employer Review</h3>
               <p className="text-xs sm:text-sm text-slate-600 mt-2 leading-relaxed">
-                Employers commit to reviewing applications within 7 business days, eliminating the traditional black hole experience.
+                Applications are delivered directly to hiring teams, providing status updates as your application progresses.
               </p>
             </div>
           </div>
@@ -1058,7 +1069,7 @@ export default function App() {
 
           <div className="flex items-center space-x-6 text-xs text-slate-500">
             <a 
-              href="http://localhost:5001/api/v1/health" 
+              href={apiHealthUrl} 
               target="_blank" 
               rel="noreferrer"
               className="flex items-center gap-1.5 hover:text-slate-800 transition-colors"

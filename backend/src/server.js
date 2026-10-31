@@ -8,6 +8,13 @@ let server = null;
 
 async function startServer() {
   try {
+    // Validate required production environment variables before accepting traffic
+    if (process.env.NODE_ENV === 'production') {
+      if (!process.env.JWT_SECRET || !process.env.JWT_SECRET.trim()) {
+        throw new Error('FATAL: JWT_SECRET environment variable is missing or empty in production.');
+      }
+    }
+
     // Await database initialization before listening for traffic
     await connectDB();
 

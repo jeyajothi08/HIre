@@ -76,7 +76,16 @@ userSchema.methods.matchPassword = async function (enteredPassword) {
 
 // Generate signed JWT token
 userSchema.methods.generateAuthToken = function () {
-  const secret = process.env.JWT_SECRET || 'fallback_secret_for_dev_mode_only';
+  const isProduction = process.env.NODE_ENV === 'production';
+  const secret = process.env.JWT_SECRET;
+
+  if (!secret || !secret.trim()) {
+    if (isProduction) {
+      throw new Error('FATAL: JWT_SECRET must be configured in production environments.');
+    }
+  }
+
+  const effectiveSecret = (secret && secret.trim()) ? secret.trim() : 'fallback_secret_for_dev_mode_only';
   const expiresIn = process.env.JWT_EXPIRES_IN || '7d';
 
   return jwt.sign(
@@ -85,7 +94,7 @@ userSchema.methods.generateAuthToken = function () {
       email: this.email,
       role: this.role,
     },
-    secret,
+    effectiveSecret,
     { expiresIn }
   );
 };

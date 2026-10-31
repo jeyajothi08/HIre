@@ -14,6 +14,15 @@ import { notFound, errorHandler } from './middleware/errorHandler.js';
 
 const app = express();
 
+// Reverse Proxy Configuration:
+// When deployed behind a single trusted reverse proxy or cloud load balancer (e.g. Render, Railway,
+// AWS ALB, or Nginx), trust exactly 1 upstream hop (the immediate front-facing proxy).
+// This ensures req.ip and express-rate-limit correctly identify real client IPs rather than
+// grouping all user requests under the load balancer IP, while preventing arbitrary client IP spoofing.
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
+
 // Security HTTP headers
 app.use(helmet());
 
